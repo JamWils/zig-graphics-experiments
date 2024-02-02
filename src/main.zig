@@ -2,6 +2,7 @@ const std = @import("std");
 
 const c = @cImport({
     @cInclude("foo.h");
+    @cInclude("sdl.h");
 });
 
 pub fn main() !void {
@@ -20,6 +21,28 @@ pub fn main() !void {
     try bw.flush(); // don't forget to flush!
 
     std.debug.print("the sum of x and y is: {d}\n", .{c.foo_add(20, 8)});
+    std.debug.print("{d}", .{c.SDL_INIT_VIDEO});
+
+    if (c.SDL_Init(c.SDL_INIT_VIDEO) < 0) {
+        @panic("SDL init error");
+    }
+    defer c.SDL_Quit();
+
+    const window = c.SDL_CreateWindow(
+        "SDL2 Test", 
+        c.SDL_WINDOWPOS_CENTERED, 
+        c.SDL_WINDOWPOS_CENTERED, 
+        800, 
+        600, 
+        c.SDL_WINDOW_SHOWN
+        ) orelse @panic("Failed to create SDL window");
+
+    c.SDL_Delay(3000);
+
+    c.SDL_DestroyWindow(window);
+    // c.SDL_Quit();
+
+
 }
 
 test "simple test" {

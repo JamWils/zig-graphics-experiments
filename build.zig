@@ -24,6 +24,12 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    exe.linkLibC();
+    exe.linkLibCpp();
+    exe.linkSystemLibrary("SDL2");
+    exe.addLibraryPath(.{ .cwd_relative = "thirdparty/sdl2/lib" });
+    exe.addIncludePath(.{ .cwd_relative = "thirdparty/sdl2/include" });
+
     exe.addCSourceFile(.{
         .file = .{
             .path = "src/foo.c",
@@ -33,6 +39,8 @@ pub fn build(b: *std.Build) void {
     exe.addIncludePath(.{
         .path = "thirdparty/include/",
     });
+
+    
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
