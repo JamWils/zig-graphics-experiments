@@ -1,5 +1,9 @@
 const std = @import("std");
 
+const c = @cImport({
+    @cInclude("foo.h");
+});
+
 pub fn main() !void {
     // Prints to stderr (it's a shortcut based on `std.io.getStdErr()`)
     std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
@@ -14,6 +18,8 @@ pub fn main() !void {
     try stdout.print("Run `zig build test` to run the tests.\n", .{});
 
     try bw.flush(); // don't forget to flush!
+
+    std.debug.print("the sum of x and y is: {d}\n", .{c.foo_add(20, 8)});
 }
 
 test "simple test" {

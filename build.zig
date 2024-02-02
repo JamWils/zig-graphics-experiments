@@ -24,6 +24,16 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    exe.addCSourceFile(.{
+        .file = .{
+            .path = "src/foo.c",
+        },
+        .flags = &.{},
+    });
+    exe.addIncludePath(.{
+        .path = "thirdparty/include/",
+    });
+
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
     // step when running `zig build`).
