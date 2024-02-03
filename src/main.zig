@@ -3,6 +3,7 @@ const std = @import("std");
 const c = @cImport({
     @cInclude("sdl.h");
     @cInclude("vulkan/vulkan.h");
+    @cInclude("vk_mem_alloc.h");
 });
 
 pub fn main() !void {
@@ -14,7 +15,7 @@ pub fn main() !void {
     _ = c.VK_NULL_HANDLE;
 
     const window = c.SDL_CreateWindow(
-        "SDL2 Test", 
+        "Zig Graphics", 
         c.SDL_WINDOWPOS_CENTERED, 
         c.SDL_WINDOWPOS_CENTERED, 
         800, 
