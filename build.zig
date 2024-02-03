@@ -1,24 +1,13 @@
 const std = @import("std");
 
-// Although this function looks imperative, note that its job is to
-// declaratively construct a build graph that will be executed by an external
-// runner.
 pub fn build(b: *std.Build) void {
-    // Standard target options allows the person running `zig build` to choose
-    // what target to build for. Here we do not override the defaults, which
-    // means any target is allowed, and the default is native. Other options
-    // for restricting supported target set are available.
     const target = b.standardTargetOptions(.{});
-
-    // Standard optimization options allow the person running `zig build` to select
-    // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall. Here we do not
-    // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
+    const writer = std.io.getStdErr().writer();
+    _ = writer;
 
     const exe = b.addExecutable(.{
         .name = "vulkan-experiments",
-        // In this case the main source file is merely a path, however, in more
-        // complicated build scripts, this could be a generated file.
         .root_source_file = .{ .path = "src/main.zig" },
         .target = target,
         .optimize = optimize,
@@ -26,6 +15,16 @@ pub fn build(b: *std.Build) void {
 
     exe.linkLibC();
     exe.linkLibCpp();
+
+    const root_target = (std.zig.system.NativeTargetInfo.detect(exe.target) catch @panic("failed to detect native target info")).target;
+    
+    const vk_lib_name = if(root_target.os.tag == .windows) "vulkan-1" else "vulkan";
+    exe.linkSystemLibrary(vk_lib_name);
+    if (b.env_map.get("VK_SDK_PATH")) |path| {
+        exe.addLibraryPath(.{ .cwd_relative = std.fmt.allocPrint(b.allocator, "{s}/Lib", .{ path }) catch @panic("Could not add Vulkan library") });
+        exe.addIncludePath(.{ .cwd_relative = std.fmt.allocPrint(b.allocator, "{s}/Include", .{ path }) catch @panic("Could not add Vulkan headers")});
+    }
+
     exe.linkSystemLibrary("SDL2");
     exe.addLibraryPath(.{ .cwd_relative = "thirdparty/sdl2/lib" });
     exe.addIncludePath(.{ .cwd_relative = "thirdparty/sdl2/include" });
@@ -34,7 +33,7 @@ pub fn build(b: *std.Build) void {
     // standard location when the user invokes the "install" step (the default
     // step when running `zig build`).
     b.installArtifact(exe);
-    if (target.os_tag == .windows) {
+    if (root_target.os.tag == .windows) {
         b.installBinFile("thirdparty/sdl2/lib/SDL2.dll", "SDL2.dll");
     }
 

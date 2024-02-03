@@ -2,6 +2,7 @@ const std = @import("std");
 
 const c = @cImport({
     @cInclude("sdl.h");
+    @cInclude("vulkan/vulkan.h");
 });
 
 pub fn main() !void {
@@ -9,6 +10,8 @@ pub fn main() !void {
         @panic("SDL init error");
     }
     defer c.SDL_Quit();
+
+    _ = c.VK_NULL_HANDLE;
 
     const window = c.SDL_CreateWindow(
         "SDL2 Test", 
