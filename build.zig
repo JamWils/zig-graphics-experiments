@@ -30,22 +30,13 @@ pub fn build(b: *std.Build) void {
     exe.addLibraryPath(.{ .cwd_relative = "thirdparty/sdl2/lib" });
     exe.addIncludePath(.{ .cwd_relative = "thirdparty/sdl2/include" });
 
-    exe.addCSourceFile(.{
-        .file = .{
-            .path = "src/foo.c",
-        },
-        .flags = &.{},
-    });
-    exe.addIncludePath(.{
-        .path = "thirdparty/include/",
-    });
-
-    
-
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
     // step when running `zig build`).
     b.installArtifact(exe);
+    if (target.os_tag == .windows) {
+        b.installBinFile("thirdparty/sdl2/lib/SDL2.dll", "SDL2.dll");
+    }
 
     // This *creates* a Run step in the build graph, to be executed when another
     // step is evaluated that depends on it. The next line below will establish
