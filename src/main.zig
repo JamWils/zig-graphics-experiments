@@ -1,29 +1,14 @@
 const std = @import("std");
-
-const c = @cImport({
-    @cInclude("sdl.h");
-    @cInclude("vulkan/vulkan.h");
-    @cInclude("vk_mem_alloc.h");
-});
+const VulkanEngine = @import("vulkan_engine.zig");
 
 pub fn main() !void {
-    if (c.SDL_Init(c.SDL_INIT_VIDEO) < 0) {
-        @panic("SDL init error");
-    }
-    defer c.SDL_Quit();
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer if (gpa.deinit() == .leak) {
+        @panic("Leaked memory");
+    };
 
-    _ = c.VK_NULL_HANDLE;
+    var engine = VulkanEngine.init(gpa.allocator());
+    defer engine.cleanup();
 
-    const window = c.SDL_CreateWindow(
-        "Zig Graphics", 
-        c.SDL_WINDOWPOS_CENTERED, 
-        c.SDL_WINDOWPOS_CENTERED, 
-        800, 
-        600, 
-        c.SDL_WINDOW_SHOWN
-        ) orelse @panic("Failed to create SDL window");
-
-    c.SDL_Delay(3000);
-
-    c.SDL_DestroyWindow(window);
+    engine.run();
 }
