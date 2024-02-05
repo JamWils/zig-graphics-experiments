@@ -27,7 +27,7 @@ const VulkanEngine = struct {
         }
     }
 
-    fn init_instance(self: *VulkanEngine) void {
+    fn initInstance(self: *VulkanEngine) void {
         var arena_alloc = std.heap.ArenaAllocator.init(self.allocator);
         defer arena_alloc.deinit();
 
@@ -37,7 +37,7 @@ const VulkanEngine = struct {
         const sdl_required_extensions = arena.alloc([*c]const u8, sdl_extensions_count) catch unreachable;
         _ = c.SDL_Vulkan_GetInstanceExtensions(self.window, &sdl_extensions_count, sdl_required_extensions.ptr);
 
-        const instance = vk_init.create_instance(std.heap.page_allocator, .{
+        const instance = vk_init.createInstance(std.heap.page_allocator, .{
             .application_name = "Vulkan App",
             .application_version = c.VK_MAKE_VERSION(0, 1, 0),
             .engine_name = "Snap Engine",
@@ -56,7 +56,7 @@ const VulkanEngine = struct {
 };
 
 pub fn init(alloc: std.mem.Allocator) VulkanEngine {
-    check_sdl(c.SDL_Init(c.SDL_INIT_VIDEO));
+    checkSdl(c.SDL_Init(c.SDL_INIT_VIDEO));
 
     const window = c.SDL_CreateWindow(
         "Vulkan App",
@@ -75,12 +75,12 @@ pub fn init(alloc: std.mem.Allocator) VulkanEngine {
         .instance = null,
     };
 
-    engine.init_instance();
+    engine.initInstance();
 
     return engine;
 }
 
-fn check_sdl(res: c_int) void {
+fn checkSdl(res: c_int) void {
     if (res != 0) {
         log.err("Vulkan engine SDL error: {s}", .{c.SDL_GetError()});
         @panic("SDL error");

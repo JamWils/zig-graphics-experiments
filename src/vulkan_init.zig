@@ -1,6 +1,6 @@
 const std = @import("std");
 const c = @import("clibs.zig");
-const check_vk = @import("./vulkan_error.zig").check_vk;
+const check_vk = @import("./vulkan_error.zig").checkVk;
 
 const log = std.log.scoped(.vulkan_init);
 
@@ -21,7 +21,7 @@ pub const Instance = struct {
     // debug_messenger: c.VkDebugUtilsMessengerEXT,
 };
 
-pub fn create_instance(alloc: std.mem.Allocator, opts: VkInstanceOpts) !Instance {
+pub fn createInstance(alloc: std.mem.Allocator, opts: VkInstanceOpts) !Instance {
     if (opts.api_version > c.VK_MAKE_VERSION(1, 1, 0)) {
         var api_requested = opts.api_version;
         try check_vk(c.vkEnumerateInstanceVersion(@ptrCast(&api_requested)));
@@ -39,7 +39,7 @@ pub fn create_instance(alloc: std.mem.Allocator, opts: VkInstanceOpts) !Instance
 
     var extensions = std.ArrayListUnmanaged([*c]const u8){};
     for (opts.required_extensions) |extension| {
-        if (check_instance_extension_support(extension, extension_props)) { 
+        if (checkInstanceExtensionSupport(extension, extension_props)) { 
             try extensions.append(arena, extension);
         } else {
             log.err("Required vulkan extension not supported: {s}", .{ extension });
@@ -71,7 +71,11 @@ pub fn create_instance(alloc: std.mem.Allocator, opts: VkInstanceOpts) !Instance
     };
 }
 
-fn check_instance_extension_support(name: [*c]const u8, properties: []c.VkExtensionProperties) bool {
+pub fn getPhysicalDevice() void {
+
+}
+
+fn checkInstanceExtensionSupport(name: [*c]const u8, properties: []c.VkExtensionProperties) bool {
     for (properties) |property| {
         const prop_name: [*c]const u8 = @ptrCast(property.extensionName[0..]);
         if (std.mem.eql(u8, std.mem.span(name), std.mem.span(prop_name))) {
