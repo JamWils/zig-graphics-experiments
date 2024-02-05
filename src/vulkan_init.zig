@@ -22,7 +22,7 @@ pub const Instance = struct {
 };
 
 pub fn create_instance(alloc: std.mem.Allocator, opts: VkInstanceOpts) !Instance {
-    if (opts.api_version > c.VK_MAKE_VERSION(1, 0, 0)) {
+    if (opts.api_version > c.VK_MAKE_VERSION(1, 1, 0)) {
         var api_requested = opts.api_version;
         try check_vk(c.vkEnumerateInstanceVersion(@ptrCast(&api_requested)));
     }

@@ -1,7 +1,7 @@
 //! This will import all of the c libraries in this project.
 //! 
 //! pub usingnamespace means other files can include this as:
-//! `const c = @import("clib.zig");`
+//! `const c = @import("clibs.zig");`
 //! 
 //! Not using an import class can create weird conflicts during compilation, see below as two structs
 //! while structurally the same aren't reconciling as they are in two separate areas of the cache.

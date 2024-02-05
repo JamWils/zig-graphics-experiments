@@ -4,6 +4,7 @@ const vk_init = @import("./vulkan_init.zig");
 
 const log = std.log.scoped(.vulkan_engine);
 const VulkanEngine = struct {
+    allocator: std.mem.Allocator,
     window: *c.SDL_Window,
     instance: c.VkInstance,
 
@@ -26,9 +27,8 @@ const VulkanEngine = struct {
         }
     }
 
-    fn init_instance(self: *VulkanEngine, alloc: std.mem.Allocator) void {
-        _ = alloc;
-        var arena_alloc = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    fn init_instance(self: *VulkanEngine) void {
+        var arena_alloc = std.heap.ArenaAllocator.init(self.allocator);
         defer arena_alloc.deinit();
 
         const arena = arena_alloc.allocator();
@@ -55,9 +55,8 @@ const VulkanEngine = struct {
     }
 };
 
-pub fn init(a: std.mem.Allocator) VulkanEngine {
+pub fn init(alloc: std.mem.Allocator) VulkanEngine {
     check_sdl(c.SDL_Init(c.SDL_INIT_VIDEO));
-    _ = a;
 
     const window = c.SDL_CreateWindow(
         "Vulkan App",
@@ -71,6 +70,7 @@ pub fn init(a: std.mem.Allocator) VulkanEngine {
     c.SDL_ShowWindow(window);
     
     var engine = VulkanEngine {
+        .allocator = alloc,
         .window = window,
         .instance = null,
     };
