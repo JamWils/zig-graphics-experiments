@@ -1,16 +1,14 @@
 const std = @import("std");
-
-const c = @cImport({
-    @cInclude("sdl.h");
-    @cInclude("vulkan/vulkan.h");
-    @cInclude("vk_mem_alloc.h");
-});
+const c = @import("clibs.zig");
+const vk_init = @import("./vulkan_init.zig");
 
 const log = std.log.scoped(.vulkan_engine);
 const VulkanEngine = struct {
     window: *c.SDL_Window,
+    instance: c.VkInstance,
 
     pub fn cleanup(self: *VulkanEngine) void {
+        c.vkDestroyInstance(self.instance, null);
         c.SDL_DestroyWindow(self.window);
     }
 
@@ -26,6 +24,33 @@ const VulkanEngine = struct {
                 }
             }
         }
+    }
+
+    fn init_instance(self: *VulkanEngine) void {
+        var arena_alloc = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+        defer arena_alloc.deinit();
+
+        const arena = arena_alloc.allocator();
+        var sdl_extensions_count: u32 = undefined;
+        _ = c.SDL_Vulkan_GetInstanceExtensions(self.window, &sdl_extensions_count, null);
+        const sdl_required_extensions = arena.alloc([*c]const u8, sdl_extensions_count) catch unreachable;
+        _ = c.SDL_Vulkan_GetInstanceExtensions(self.window, &sdl_extensions_count, sdl_required_extensions.ptr);
+
+        const instance = vk_init.create_instance(std.heap.page_allocator, .{
+            .application_name = "Vulkan App",
+            .application_version = c.VK_MAKE_VERSION(0, 1, 0),
+            .engine_name = "Snap Engine",
+            .engine_version = c.VK_MAKE_VERSION(0, 1, 0),
+            .api_version = c.VK_API_VERSION_1_3,
+            .debug = true,
+            .required_extensions = sdl_required_extensions
+        }) catch |err| {
+            log.err("Failed to create a Vulkan Instance with error: {s}", .{ @errorName(err) });
+            unreachable;
+        };
+
+        self.instance = instance.handler;
+        // TODO: Debug messenger
     }
 };
 
@@ -46,7 +71,10 @@ pub fn init(a: std.mem.Allocator) VulkanEngine {
     
     var engine = VulkanEngine {
         .window = window,
+        .instance = null,
     };
+
+    engine.init_instance();
 
     return engine;
 }
