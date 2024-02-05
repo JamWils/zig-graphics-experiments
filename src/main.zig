@@ -7,7 +7,10 @@ pub fn main() !void {
         @panic("Leaked memory");
     };
 
-    var engine = VulkanEngine.init(gpa.allocator());
+    var engine = VulkanEngine.init(gpa.allocator()) catch |err| {
+        std.debug.print("Unable to create vulkan engine: {}\n", .{err});
+        @panic("Unable to create vulkan engine");
+    };
     defer engine.cleanup();
 
     engine.run();

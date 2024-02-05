@@ -71,10 +71,6 @@ pub fn createInstance(alloc: std.mem.Allocator, opts: VkInstanceOpts) !Instance 
     };
 }
 
-pub fn getPhysicalDevice() void {
-
-}
-
 fn checkInstanceExtensionSupport(name: [*c]const u8, properties: []c.VkExtensionProperties) bool {
     for (properties) |property| {
         const prop_name: [*c]const u8 = @ptrCast(property.extensionName[0..]);
