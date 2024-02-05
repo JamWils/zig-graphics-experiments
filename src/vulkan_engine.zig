@@ -26,7 +26,8 @@ const VulkanEngine = struct {
         }
     }
 
-    fn init_instance(self: *VulkanEngine) void {
+    fn init_instance(self: *VulkanEngine, alloc: std.mem.Allocator) void {
+        _ = alloc;
         var arena_alloc = std.heap.ArenaAllocator.init(std.heap.page_allocator);
         defer arena_alloc.deinit();
 

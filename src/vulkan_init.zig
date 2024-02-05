@@ -43,7 +43,7 @@ pub fn create_instance(alloc: std.mem.Allocator, opts: VkInstanceOpts) !Instance
             try extensions.append(arena, extension);
         } else {
             log.err("Required vulkan extension not supported: {s}", .{ extension });
-            return error.vulkan_extension_not_supported;
+            return error.VulkanExtensionNotSupported;
         }
     }
 
