@@ -10,8 +10,11 @@ const VulkanEngine = struct {
     window: *c.SDL_Window,
     instance: c.VkInstance,
     physical_device: vkd.PhysicalDevice,
+    device: c.VkDevice,
+    graphics_queue: c.VkQueue,
 
     pub fn cleanup(self: *VulkanEngine) void {
+        c.vkDestroyDevice(self.device, null);
         c.vkDestroyInstance(self.instance, null);
         c.SDL_DestroyWindow(self.window);
     }
@@ -45,6 +48,7 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
 
     const instance = createInstance(alloc, window);
     const physical_device = try vkd.getPhysicalDevice(alloc, instance.handler);
+    const device = try vkd.createLogicalDevice(physical_device);
 
     c.SDL_ShowWindow(window);
     
@@ -53,6 +57,8 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
         .window = window,
         .instance = instance.handler,
         .physical_device = physical_device,
+        .device = device.handle,
+        .graphics_queue = device.graphics_queue,
     };
 
     return engine;

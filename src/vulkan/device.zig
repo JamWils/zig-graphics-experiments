@@ -9,6 +9,11 @@ pub const PhysicalDevice = struct {
     queue_indices: QueueFamilyIndices = undefined,
 };
 
+pub const Device = struct {
+    handle: c.VkDevice = null,
+    graphics_queue: c.VkQueue = null,
+};
+
 pub const QueueFamilyIndices = struct {
     graphics_queue_location: u32 = undefined,
     present_queue_location: u32 = undefined,
@@ -17,6 +22,36 @@ pub const QueueFamilyIndices = struct {
         return self.graphics_queue_location >= 0;
     }
 };
+
+pub fn createLogicalDevice(physical_device: PhysicalDevice) !Device {
+    const priority: f32 = 1;
+    const queue_create_info = std.mem.zeroInit(c.VkDeviceQueueCreateInfo, .{
+        .sType = c.VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+        .queueFamilyIndex = physical_device.queue_indices.graphics_queue_location,
+        .queueCount = 1,
+        .pQueuePriorities = &priority,
+    });
+
+    const device_create_info = std.mem.zeroInit(c.VkDeviceCreateInfo, .{
+        .sType = c.VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+        .queueCreateInfoCount = 1,
+        .pQueueCreateInfos = &queue_create_info,
+        .enabledExtensionCount = 0,
+        .ppEnabledExtensionNames = null,
+        .enabledLayerCount = 0,
+    });
+
+    var device: c.VkDevice = undefined;
+    try vke.checkResult(c.vkCreateDevice(physical_device.handle, &device_create_info, null, &device));
+
+    var graphics_queue: c.VkQueue = undefined;
+    c.vkGetDeviceQueue(device, physical_device.queue_indices.graphics_queue_location, 0, &graphics_queue);
+
+    return .{
+        .handle = device,
+        .graphics_queue = graphics_queue,
+    };
+}
 
 pub fn getPhysicalDevice(alloc: std.mem.Allocator, instance: c.VkInstance) !PhysicalDevice {
     var device_count: u32 = undefined;
@@ -39,6 +74,7 @@ pub fn getPhysicalDevice(alloc: std.mem.Allocator, instance: c.VkInstance) !Phys
         if (queue_indices.isValid()) {
             physicalDevice.handle = device;
             physicalDevice.queue_indices = queue_indices;
+            std.debug.print("Set the physical device HANDLE", .{});
             break;
         }
     }
