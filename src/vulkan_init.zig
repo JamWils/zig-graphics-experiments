@@ -1,6 +1,6 @@
 const std = @import("std");
 const c = @import("clibs.zig");
-const check_vk = @import("./vulkan_error.zig").checkVk;
+const vke = @import("./vulkan/error.zig");
 
 const log = std.log.scoped(.vulkan_init);
 
@@ -24,7 +24,7 @@ pub const Instance = struct {
 pub fn createInstance(alloc: std.mem.Allocator, opts: VkInstanceOpts) !Instance {
     if (opts.api_version > c.VK_MAKE_VERSION(1, 1, 0)) {
         var api_requested = opts.api_version;
-        try check_vk(c.vkEnumerateInstanceVersion(@ptrCast(&api_requested)));
+        try vke.checkResult(c.vkEnumerateInstanceVersion(@ptrCast(&api_requested)));
     }
 
     var arena_alloc = std.heap.ArenaAllocator.init(alloc);
@@ -33,9 +33,9 @@ pub fn createInstance(alloc: std.mem.Allocator, opts: VkInstanceOpts) !Instance 
     const arena = arena_alloc.allocator();
 
     var extension_count: u32 = undefined;
-    try check_vk(c.vkEnumerateInstanceExtensionProperties(null, &extension_count, null));
+    try vke.checkResult(c.vkEnumerateInstanceExtensionProperties(null, &extension_count, null));
     const extension_props = try arena.alloc(c.VkExtensionProperties, extension_count);
-    try check_vk(c.vkEnumerateInstanceExtensionProperties(null, &extension_count, extension_props.ptr));
+    try vke.checkResult(c.vkEnumerateInstanceExtensionProperties(null, &extension_count, extension_props.ptr));
 
     var extensions = std.ArrayListUnmanaged([*c]const u8){};
     for (opts.required_extensions) |extension| {
@@ -64,7 +64,7 @@ pub fn createInstance(alloc: std.mem.Allocator, opts: VkInstanceOpts) !Instance 
     });
 
     var instance: c.VkInstance = undefined;
-    try check_vk(c.vkCreateInstance(&instance_info, opts.alloc_cb, &instance));
+    try vke.checkResult(c.vkCreateInstance(&instance_info, opts.alloc_cb, &instance));
 
     return .{
         .handler = instance,
