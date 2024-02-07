@@ -14,9 +14,11 @@ const VulkanEngine = struct {
     debug_messenger: c.VkDebugUtilsMessengerEXT,
     physical_device: vkd.PhysicalDevice,
     device: c.VkDevice,
+    surface: c.VkSurfaceKHR,
     graphics_queue: c.VkQueue,
 
     pub fn cleanup(self: *VulkanEngine) void {
+        c.vkDestroySurfaceKHR(self.instance, self.surface, null);
         c.vkDestroyDevice(self.device, null);
         if (self.debug_messenger != null) {
             const destroyFn = vki.getDestroyDebugUtilsMessengerFn(self.instance).?;
@@ -66,8 +68,11 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
         .debug_messenger = instance.debug_messenger,
         .physical_device = physical_device,
         .device = device.handle,
+        .surface = null,
         .graphics_queue = device.graphics_queue,
     };
+
+    checkSdlBool(c.SDL_Vulkan_CreateSurface(window, instance.handle, &engine.surface));
 
     return engine;
 }
@@ -100,6 +105,13 @@ fn createInstance(alloc: std.mem.Allocator, window: *c.SDL_Window) vki.Instance 
 
 fn checkSdl(res: c_int) void {
     if (res != 0) {
+        log.err("Vulkan engine SDL error: {s}", .{c.SDL_GetError()});
+        @panic("SDL error");
+    }
+}
+
+fn checkSdlBool(res: c.SDL_bool) void {
+    if (res != c.SDL_TRUE) {
         log.err("Vulkan engine SDL error: {s}", .{c.SDL_GetError()});
         @panic("SDL error");
     }
