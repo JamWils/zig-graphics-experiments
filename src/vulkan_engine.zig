@@ -110,6 +110,7 @@ fn checkSdl(res: c_int) void {
     }
 }
 
+
 fn checkSdlBool(res: c.SDL_bool) void {
     if (res != c.SDL_TRUE) {
         log.err("Vulkan engine SDL error: {s}", .{c.SDL_GetError()});

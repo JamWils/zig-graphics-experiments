@@ -9,6 +9,11 @@ pub const PhysicalDevice = struct {
     queue_indices: QueueFamilyIndices = undefined,
 };
 
+pub const PhysicalDeviceOpts = struct {
+    features_12: c.VkPhysicalDeviceVulkan12Features,
+    features_13: c.VkPhysicalDeviceVulkan13Features,
+};
+
 pub const Device = struct {
     handle: c.VkDevice = null,
     graphics_queue: c.VkQueue = null,
@@ -67,19 +72,49 @@ pub fn getPhysicalDevice(alloc: std.mem.Allocator, instance: c.VkInstance) !Phys
     const devices = try arena.alloc(c.VkPhysicalDevice, device_count);
     try vke.checkResult(c.vkEnumeratePhysicalDevices(instance, &device_count, devices.ptr));
 
-    var physicalDevice = PhysicalDevice{};
-
+    var physical_device = PhysicalDevice{};
     for (devices) |device| {
         const queue_indices = try getQueueFamilies(alloc, device);
         if (queue_indices.isValid()) {
-            physicalDevice.handle = device;
-            physicalDevice.queue_indices = queue_indices;
+            physical_device.handle = device;
+            physical_device.queue_indices = queue_indices;
             std.debug.print("Set the physical device HANDLE", .{});
             break;
         }
     }
 
-    return physicalDevice;
+    var features_1_3 = std.mem.zeroInit(c.VkPhysicalDeviceVulkan13Features, .{
+        .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
+    });
+
+    var features_1_2 = std.mem.zeroInit(c.VkPhysicalDeviceVulkan12Features, .{
+        .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+    });
+    features_1_2.pNext = &features_1_3;
+
+    var physical_features = std.mem.zeroInit(c.VkPhysicalDeviceFeatures2, .{
+        .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+    });
+    physical_features.pNext = &features_1_2;
+    c.vkGetPhysicalDeviceFeatures2(physical_device.handle, &physical_features);
+
+    if (features_1_2.bufferDeviceAddress == c.VK_FALSE) {
+        return error.MissingFeatureBufferDeviceAddress;
+    }
+
+    if (features_1_2.descriptorIndexing == c.VK_FALSE) {
+        return error.MissingFeatureDescriptorIndexing;
+    }
+
+    if (features_1_3.dynamicRendering == c.VK_FALSE) {
+        return error.MissingFeatureDynamicRendering;
+    }
+
+    if (features_1_3.synchronization2 == c.VK_FALSE) {
+        return error.MissingFeatureSynchronization2;
+    }
+
+    return physical_device;
 }
 
 fn getQueueFamilies(alloc: std.mem.Allocator, device: c.VkPhysicalDevice) !QueueFamilyIndices {
