@@ -1,20 +1,27 @@
 const std = @import("std");
 const c = @import("clibs.zig");
-const vki = @import("./vulkan_init.zig");
+const vki = @import("./vulkan/instance.zig");
 const vkd = @import("./vulkan/device.zig");
 const vke = @import("./vulkan/error.zig");
 
 const log = std.log.scoped(.vulkan_engine);
+const vk_alloc_callbacks: ?*c.VkAllocationCallbacks = null;
+
 const VulkanEngine = struct {
     allocator: std.mem.Allocator,
     window: *c.SDL_Window,
     instance: c.VkInstance,
+    debug_messenger: c.VkDebugUtilsMessengerEXT,
     physical_device: vkd.PhysicalDevice,
     device: c.VkDevice,
     graphics_queue: c.VkQueue,
 
     pub fn cleanup(self: *VulkanEngine) void {
         c.vkDestroyDevice(self.device, null);
+        if (self.debug_messenger != null) {
+            const destroyFn = vki.getDestroyDebugUtilsMessengerFn(self.instance).?;
+            destroyFn(self.instance, self.debug_messenger, vk_alloc_callbacks);
+        }
         c.vkDestroyInstance(self.instance, null);
         c.SDL_DestroyWindow(self.window);
     }
@@ -47,7 +54,7 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
     ) orelse @panic("Failed to create SDL window");
 
     const instance = createInstance(alloc, window);
-    const physical_device = try vkd.getPhysicalDevice(alloc, instance.handler);
+    const physical_device = try vkd.getPhysicalDevice(alloc, instance.handle);
     const device = try vkd.createLogicalDevice(physical_device);
 
     c.SDL_ShowWindow(window);
@@ -55,7 +62,8 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
     var engine = VulkanEngine {
         .allocator = alloc,
         .window = window,
-        .instance = instance.handler,
+        .instance = instance.handle,
+        .debug_messenger = instance.debug_messenger,
         .physical_device = physical_device,
         .device = device.handle,
         .graphics_queue = device.graphics_queue,
