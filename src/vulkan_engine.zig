@@ -16,6 +16,7 @@ const VulkanEngine = struct {
     device: c.VkDevice,
     surface: c.VkSurfaceKHR,
     graphics_queue: c.VkQueue,
+    presentation_queue: c.VkQueue,
 
     pub fn cleanup(self: *VulkanEngine) void {
         c.vkDestroySurfaceKHR(self.instance, self.surface, null);
@@ -56,8 +57,11 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
     ) orelse @panic("Failed to create SDL window");
 
     const instance = createInstance(alloc, window);
-    const physical_device = try vkd.getPhysicalDevice(alloc, instance.handle);
-    const device = try vkd.createLogicalDevice(physical_device);
+
+    var surface: c.VkSurfaceKHR = undefined;
+    checkSdlBool(c.SDL_Vulkan_CreateSurface(window, instance.handle, &surface));
+    const physical_device = try vkd.getPhysicalDevice(alloc, instance.handle, surface);
+    const device = try vkd.createLogicalDevice(alloc, physical_device);
 
     c.SDL_ShowWindow(window);
     
@@ -68,11 +72,10 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
         .debug_messenger = instance.debug_messenger,
         .physical_device = physical_device,
         .device = device.handle,
-        .surface = null,
+        .surface = surface,
         .graphics_queue = device.graphics_queue,
+        .presentation_queue = device.presentation_queue,
     };
-
-    checkSdlBool(c.SDL_Vulkan_CreateSurface(window, instance.handle, &engine.surface));
 
     return engine;
 }
