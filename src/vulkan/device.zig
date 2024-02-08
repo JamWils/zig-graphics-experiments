@@ -30,7 +30,12 @@ pub const QueueFamilyIndices = struct {
     }
 };
 
-pub fn createLogicalDevice(alloc: std.mem.Allocator, physical_device: PhysicalDevice) !Device {
+pub const DeviceQueueResult = union(enum) {
+    invalid: void,
+    queue_family_indicies: QueueFamilyIndices,
+};
+
+pub fn createLogicalDevice(alloc: std.mem.Allocator, physical_device: PhysicalDevice, _: []const [*c]const u8) !Device {
     var arena_state = std.heap.ArenaAllocator.init(alloc);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
@@ -78,7 +83,7 @@ pub fn createLogicalDevice(alloc: std.mem.Allocator, physical_device: PhysicalDe
     };
 }
 
-pub fn getPhysicalDevice(alloc: std.mem.Allocator, instance: c.VkInstance, surface: c.VkSurfaceKHR) !PhysicalDevice {
+pub fn getPhysicalDevice(alloc: std.mem.Allocator, instance: c.VkInstance, surface: c.VkSurfaceKHR, required_extensions: []const [*c]const u8) !PhysicalDevice {
     var device_count: u32 = undefined;
     try vke.checkResult(c.vkEnumeratePhysicalDevices(instance, &device_count, null));
 
@@ -93,15 +98,19 @@ pub fn getPhysicalDevice(alloc: std.mem.Allocator, instance: c.VkInstance, surfa
     try vke.checkResult(c.vkEnumeratePhysicalDevices(instance, &device_count, devices.ptr));
 
     var physical_device = PhysicalDevice{};
-    for (devices) |device| {
-        const queue_indices = try getQueueFamilies(alloc, device, surface);
-        if (queue_indices.isValid()) {
-            physical_device.handle = device;
-            physical_device.queue_indices = queue_indices;
-            std.debug.print("Set the physical device HANDLE", .{});
-            break;
+    _ = device_loop: for (devices) |device| {
+        const device_result = try isDeviceSuitable(alloc, device, surface, required_extensions);
+
+        switch (device_result) {
+            .invalid => {},
+            .queue_family_indicies => |qfi| {
+                physical_device.handle = device;
+                physical_device.queue_indices = qfi;
+                std.debug.print("Set the physical device handle", .{});
+                break :device_loop;
+            }
         }
-    }
+    };
 
     var features_1_3 = std.mem.zeroInit(c.VkPhysicalDeviceVulkan13Features, .{
         .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
@@ -156,7 +165,6 @@ fn getQueueFamilies(alloc: std.mem.Allocator, device: c.VkPhysicalDevice, surfac
         }
 
         var presentation_support: c.VkBool32 = 0;
-        // var index: u32 = @as(u32, i);
         try vke.checkResult(c.vkGetPhysicalDeviceSurfaceSupportKHR(device, index, surface, &presentation_support));
         if (queue_family.queueCount > 0 and presentation_support == c.VK_TRUE) {
             indices.presentation_queue_location = @intCast(index);
@@ -168,4 +176,47 @@ fn getQueueFamilies(alloc: std.mem.Allocator, device: c.VkPhysicalDevice, surfac
     }
 
     return indices;
+}
+
+fn checkDeviceExtensionSupport(alloc: std.mem.Allocator, device: c.VkPhysicalDevice, required_extensions: []const [*c]const u8) !bool {
+    var arena_alloc = std.heap.ArenaAllocator.init(alloc);
+    defer arena_alloc.deinit();
+    const arena = arena_alloc.allocator();
+
+    var extension_count: u32 = 0;
+    try vke.checkResult(c.vkEnumerateDeviceExtensionProperties(device, null, &extension_count, null));
+
+    if (extension_count == 0) return false;
+
+    const extensions = try arena.alloc(c.VkExtensionProperties, extension_count);
+    try vke.checkResult(c.vkEnumerateDeviceExtensionProperties(device, null, &extension_count, extensions.ptr));
+
+    var has_extension = false;
+    for (required_extensions) |required_extension| {
+        for (extensions) |extension| {
+            const extension_name: [*c]const u8 = @ptrCast(extension.extensionName[0..]);
+            if (std.mem.eql(u8, std.mem.span(required_extension), std.mem.span(extension_name))) {
+                has_extension = true;
+            }
+        }
+
+        if (!has_extension) {
+            return false;
+        }
+    }
+
+    return has_extension;
+}
+
+fn isDeviceSuitable(alloc: std.mem.Allocator, device: c.VkPhysicalDevice, surface: c.VkSurfaceKHR, required_extensions: []const [*c]const u8) !DeviceQueueResult {
+    const queue_family_indices = try getQueueFamilies(alloc, device, surface);
+    if (!queue_family_indices.isValid()) return .{ .invalid = {} };
+
+    const extensions_supported = try checkDeviceExtensionSupport(alloc, device, required_extensions);
+
+    if (extensions_supported) {
+        return .{ .queue_family_indicies = queue_family_indices };
+    } else {
+        return . { .invalid = {} };
+    }
 }
