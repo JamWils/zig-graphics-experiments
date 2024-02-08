@@ -58,14 +58,14 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
 
     const instance = createInstance(alloc, window);
 
-    const required_extensions = .{
+    const required_device_extensions = .{
         c.VK_KHR_SWAPCHAIN_EXTENSION_NAME,
     };
 
     var surface: c.VkSurfaceKHR = undefined;
     checkSdlBool(c.SDL_Vulkan_CreateSurface(window, instance.handle, &surface));
-    const physical_device = try vkd.getPhysicalDevice(alloc, instance.handle, surface, &required_extensions);
-    const device = try vkd.createLogicalDevice(alloc, physical_device, &required_extensions);
+    const physical_device = try vkd.getPhysicalDevice(alloc, instance.handle, surface, &required_device_extensions);
+    const device = try vkd.createLogicalDevice(alloc, physical_device, &required_device_extensions);
 
     c.SDL_ShowWindow(window);
     

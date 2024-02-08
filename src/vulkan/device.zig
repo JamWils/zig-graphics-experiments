@@ -1,6 +1,7 @@
 const std = @import("std");
 const vke = @import("./error.zig");
 const c = @import("../clibs.zig");
+const vks = @import("./swapchain.zig");
 
 const log = std.log.scoped(.vulkan_device);
 
@@ -35,7 +36,7 @@ pub const DeviceQueueResult = union(enum) {
     queue_family_indicies: QueueFamilyIndices,
 };
 
-pub fn createLogicalDevice(alloc: std.mem.Allocator, physical_device: PhysicalDevice, _: []const [*c]const u8) !Device {
+pub fn createLogicalDevice(alloc: std.mem.Allocator, physical_device: PhysicalDevice, required_extensions: []const [*c]const u8) !Device {
     var arena_state = std.heap.ArenaAllocator.init(alloc);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
@@ -62,8 +63,8 @@ pub fn createLogicalDevice(alloc: std.mem.Allocator, physical_device: PhysicalDe
         .sType = c.VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
         .queueCreateInfoCount = @as(u32, @intCast(queue_create_infos.items.len)),
         .pQueueCreateInfos = queue_create_infos.items.ptr,
-        .enabledExtensionCount = 0,
-        .ppEnabledExtensionNames = null,
+        .enabledExtensionCount = @as(u32, @intCast(required_extensions.len)),
+        .ppEnabledExtensionNames = required_extensions.ptr,
         .enabledLayerCount = 0,
     });
 
@@ -212,8 +213,17 @@ fn isDeviceSuitable(alloc: std.mem.Allocator, device: c.VkPhysicalDevice, surfac
     const queue_family_indices = try getQueueFamilies(alloc, device, surface);
     if (!queue_family_indices.isValid()) return .{ .invalid = {} };
 
-    const extensions_supported = try checkDeviceExtensionSupport(alloc, device, required_extensions);
+    var arena_state = std.heap.ArenaAllocator.init(alloc);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
 
+    const swapchain_details = try vks.SwapchainDetails.createAlloc(arena, device, surface);
+    defer swapchain_details.deinit(arena);
+    if (swapchain_details.surface_formats.len == 0 or swapchain_details.presentation_modes.len == 0) {
+        return . { .invalid = {} };
+    }
+
+    const extensions_supported = try checkDeviceExtensionSupport(alloc, device, required_extensions);
     if (extensions_supported) {
         return .{ .queue_family_indicies = queue_family_indices };
     } else {
