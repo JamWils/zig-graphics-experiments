@@ -102,7 +102,7 @@ fn compileShaders(b: *std.Build) void {
                 validator_cmd.addArg("-V");
                 validator_cmd.addFileArg(.{ .path = source_path});
                 
-                const output_path = std.fmt.allocPrint(b.allocator, "spirv/{s}.spv", .{name}) catch @panic("Failed to create output path");
+                const output_path = std.fmt.allocPrint(b.allocator, "shaders/{s}.spv", .{name}) catch @panic("Failed to create output path");
                 validator_cmd.addArg("-o");
                 const out_file = validator_cmd.addOutputFileArg(output_path);
 

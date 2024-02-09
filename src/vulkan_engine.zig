@@ -4,6 +4,7 @@ const vki = @import("./vulkan/instance.zig");
 const vkd = @import("./vulkan/device.zig");
 const vke = @import("./vulkan/error.zig");
 const vks = @import("./vulkan/swapchain.zig");
+const vkp = @import("./vulkan/pipeline.zig");
 
 const log = std.log.scoped(.vulkan_engine);
 const vk_alloc_callbacks: ?*c.VkAllocationCallbacks = null;
@@ -92,6 +93,7 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
         .window_height = @intCast(window_height),
         .window_width = @intCast(window_width),
     });
+    try vkp.createGraphicsPipeline(alloc, device.handle);
 
     c.SDL_ShowWindow(window);
     
