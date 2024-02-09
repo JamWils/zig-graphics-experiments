@@ -13,6 +13,8 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    compileShaders(b);
+
     exe.linkLibC();
     exe.linkLibCpp();
 
@@ -77,4 +79,38 @@ pub fn build(b: *std.Build) void {
     // running the unit tests.
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_unit_tests.step);
+}
+
+fn compileShaders(b: *std.Build) void {
+    const shaders_dir = if (@hasDecl(@TypeOf(b.build_root.handle), "openIterableDir"))
+        b.build_root.handle.openIterableDir("shaders", .{}) catch @panic("Failed to open shaders iterable directory")
+    else b.build.root.handle.openDir("shaders", .{ .iterate = true }) catch @panic("Failed to open shaders directory");
+
+    var dir_iterator = shaders_dir.iterate();
+    while(dir_iterator.next() catch @panic("cannot iterate directory")) |item| {
+        if (item.kind == .file) {
+            const extension = std.fs.path.extension(item.name);
+            if (std.mem.eql(u8, extension, ".glsl")) {
+                const basename = std.fs.path.basename(item.name);
+                const name = basename[0..basename.len - extension.len];
+
+                std.debug.print("Compiling shader: {s}\n", .{item.name});
+                
+                const validator_cmd = b.addSystemCommand(&.{ "glslangValidator"});
+
+                const source_path = std.fmt.allocPrint(b.allocator, "shaders/{s}.glsl", .{name}) catch @panic("Failed to create sourc e path");
+                validator_cmd.addArg("-V");
+                validator_cmd.addFileArg(.{ .path = source_path});
+                
+                const output_path = std.fmt.allocPrint(b.allocator, "spirv/{s}.spv", .{name}) catch @panic("Failed to create output path");
+                validator_cmd.addArg("-o");
+                const out_file = validator_cmd.addOutputFileArg(output_path);
+
+                validator_cmd.stdio = .zig_test;
+
+                const install_shader = b.addInstallFileWithDir(out_file, .prefix, output_path);
+                b.getInstallStep().dependOn(&install_shader.step);
+            }
+        }
+    }
 }
