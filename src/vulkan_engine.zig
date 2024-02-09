@@ -3,6 +3,7 @@ const c = @import("clibs.zig");
 const vki = @import("./vulkan/instance.zig");
 const vkd = @import("./vulkan/device.zig");
 const vke = @import("./vulkan/error.zig");
+const vks = @import("./vulkan/swapchain.zig");
 
 const log = std.log.scoped(.vulkan_engine);
 const vk_alloc_callbacks: ?*c.VkAllocationCallbacks = null;
@@ -17,8 +18,10 @@ const VulkanEngine = struct {
     surface: c.VkSurfaceKHR,
     graphics_queue: c.VkQueue,
     presentation_queue: c.VkQueue,
+    swapchain: c.VkSwapchainKHR,
 
     pub fn cleanup(self: *VulkanEngine) void {
+        c.vkDestroySwapchainKHR(self.device, self.swapchain, null);
         c.vkDestroySurfaceKHR(self.instance, self.surface, null);
         c.vkDestroyDevice(self.device, null);
         if (self.debug_messenger != null) {
@@ -56,6 +59,10 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
         c.SDL_WINDOW_VULKAN | c.SDL_WINDOW_RESIZABLE,
     ) orelse @panic("Failed to create SDL window");
 
+    var window_width: c_int = 0;
+    var window_height: c_int = 0;
+    c.SDL_GetWindowSize(window, &window_width, &window_height);
+
     const instance = createInstance(alloc, window);
 
     const required_device_extensions = .{
@@ -66,6 +73,13 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
     checkSdlBool(c.SDL_Vulkan_CreateSurface(window, instance.handle, &surface));
     const physical_device = try vkd.getPhysicalDevice(alloc, instance.handle, surface, &required_device_extensions);
     const device = try vkd.createLogicalDevice(alloc, physical_device, &required_device_extensions);
+    
+    const swapchain = try vks.createSwapchain(alloc, physical_device.handle, device.handle, surface, .{
+        .graphics_queue_index = physical_device.queue_indices.graphics_queue_location,
+        .presentation_queue_index = physical_device.queue_indices.presentation_queue_location,
+        .window_height = @intCast(window_height),
+        .window_width = @intCast(window_width),
+    });
 
     c.SDL_ShowWindow(window);
     
@@ -79,6 +93,7 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
         .surface = surface,
         .graphics_queue = device.graphics_queue,
         .presentation_queue = device.presentation_queue,
+        .swapchain = swapchain.handle,
     };
 
     return engine;
