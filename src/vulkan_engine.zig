@@ -19,8 +19,20 @@ const VulkanEngine = struct {
     graphics_queue: c.VkQueue,
     presentation_queue: c.VkQueue,
     swapchain: c.VkSwapchainKHR,
+    swapchain_image_format: c.VkFormat,
+    swapchain_extent: c.VkExtent2D,
+    swapchain_images: []c.VkImage,
+    swapchain_image_views: []c.VkImageView,
 
     pub fn cleanup(self: *VulkanEngine) void {
+
+        for (self.swapchain_image_views) |image_view| {
+            c.vkDestroyImageView(self.device, image_view, null);
+        }
+
+        self.allocator.free(self.swapchain_image_views);
+        self.allocator.free(self.swapchain_images);
+
         c.vkDestroySwapchainKHR(self.device, self.swapchain, null);
         c.vkDestroySurfaceKHR(self.instance, self.surface, null);
         c.vkDestroyDevice(self.device, null);
@@ -94,6 +106,10 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
         .graphics_queue = device.graphics_queue,
         .presentation_queue = device.presentation_queue,
         .swapchain = swapchain.handle,
+        .swapchain_image_format = swapchain.surface_format.format,
+        .swapchain_extent = swapchain.image_extent,
+        .swapchain_images = swapchain.images,
+        .swapchain_image_views = swapchain.image_views,
     };
 
     return engine;
@@ -131,7 +147,6 @@ fn checkSdl(res: c_int) void {
         @panic("SDL error");
     }
 }
-
 
 fn checkSdlBool(res: c.SDL_bool) void {
     if (res != c.SDL_TRUE) {

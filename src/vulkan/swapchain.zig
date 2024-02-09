@@ -13,6 +13,13 @@ pub const Swapchain = struct {
     handle: c.VkSwapchainKHR = null,
     surface_format: c.VkSurfaceFormatKHR = undefined,
     image_extent: c.VkExtent2D = undefined,
+    images: []c.VkImage = &.{},
+    image_views: []c.VkImageView = &.{},
+};
+
+pub const SwapchainImage = struct {
+    image: c.VkImage,
+    image_view: c.VkImageView,
 };
 
 pub const SwapchainDetails = struct {
@@ -52,9 +59,9 @@ pub const SwapchainDetails = struct {
     }
 };
 
-pub fn createSwapchain(alloc: std.mem.Allocator, physical_device: c.VkPhysicalDevice, device: c.VkDevice, surface: c.VkSurfaceKHR, opts: SwapchainOpts) !Swapchain {
-    const swapchain_details = try SwapchainDetails.createAlloc(alloc, physical_device, surface);
-    defer swapchain_details.deinit(alloc);
+pub fn createSwapchain(a: std.mem.Allocator, physical_device: c.VkPhysicalDevice, device: c.VkDevice, surface: c.VkSurfaceKHR, opts: SwapchainOpts) !Swapchain {
+    const swapchain_details = try SwapchainDetails.createAlloc(a, physical_device, surface);
+    defer swapchain_details.deinit(a);
 
     const surface_format = selectSurfaceFormat(swapchain_details.surface_formats);
     const presentation_mode = selectPresentationMode(swapchain_details.presentation_modes);
@@ -101,11 +108,53 @@ pub fn createSwapchain(alloc: std.mem.Allocator, physical_device: c.VkPhysicalDe
     var swapchain: c.VkSwapchainKHR = undefined;
     try vke.checkResult(c.vkCreateSwapchainKHR(device, &swapchain_info, null, &swapchain));
 
+    var swapchain_image_count: u32 = undefined;
+    try vke.checkResult(c.vkGetSwapchainImagesKHR(device, swapchain, &swapchain_image_count, null));
+    var images = try a.alloc(c.VkImage, swapchain_image_count);
+    errdefer a.free(images);
+    try vke.checkResult(c.vkGetSwapchainImagesKHR(device, swapchain, &swapchain_image_count, images.ptr));
+
+    var image_views = try a.alloc(c.VkImageView, swapchain_image_count);
+    errdefer a.free(image_views);
+
+    for (images, image_views) |image, *image_view| {
+        image_view.* = try createImageView(device, image, surface_format.format, c.VK_IMAGE_ASPECT_COLOR_BIT);
+    }
+
     return Swapchain{
         .handle = swapchain,
         .surface_format = surface_format,
         .image_extent = image_extent,
+        .images = images,
+        .image_views = image_views,
     };
+}
+
+fn createImageView(device: c.VkDevice, image: c.VkImage, format: c.VkFormat, aspectFlags: c.VkImageAspectFlags) !c.VkImageView {
+    const image_view_info = std.mem.zeroInit(c.VkImageViewCreateInfo, .{
+        .sType = c.VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .image = image,
+        .viewType = c.VK_IMAGE_VIEW_TYPE_2D,
+        .format = format,
+        .components = .{
+            .r = c.VK_COMPONENT_SWIZZLE_IDENTITY,
+            .g = c.VK_COMPONENT_SWIZZLE_IDENTITY,
+            .b = c.VK_COMPONENT_SWIZZLE_IDENTITY,
+            .a = c.VK_COMPONENT_SWIZZLE_IDENTITY,
+        },
+        .subresourceRange = .{
+            .aspectMask = aspectFlags,
+            .baseMipLevel = 0,
+            .levelCount = 1,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        },
+    }); 
+
+    var image_view: c.VkImageView = undefined;
+    try vke.checkResult(c.vkCreateImageView(device, &image_view_info, null, &image_view));
+
+    return image_view;
 }
 
 fn selectSurfaceFormat(formats: []c.VkSurfaceFormatKHR) c.VkSurfaceFormatKHR {
