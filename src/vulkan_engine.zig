@@ -5,6 +5,7 @@ const vkd = @import("./vulkan/device.zig");
 const vke = @import("./vulkan/error.zig");
 const vks = @import("./vulkan/swapchain.zig");
 const vkp = @import("./vulkan/pipeline.zig");
+const vkr = @import("./vulkan/render_pass.zig");
 
 const log = std.log.scoped(.vulkan_engine);
 const vk_alloc_callbacks: ?*c.VkAllocationCallbacks = null;
@@ -24,8 +25,14 @@ const VulkanEngine = struct {
     swapchain_extent: c.VkExtent2D,
     swapchain_images: []c.VkImage,
     swapchain_image_views: []c.VkImageView,
+    render_pass: c.VkRenderPass,
+    pipeline_layout: c.VkPipelineLayout,
+    graphics_pipeline: c.VkPipeline,
 
     pub fn cleanup(self: *VulkanEngine) void {
+        c.vkDestroyPipeline(self.device, self.graphics_pipeline, null);
+        c.vkDestroyPipelineLayout(self.device, self.pipeline_layout, null);
+        c.vkDestroyRenderPass(self.device, self.render_pass, null);
 
         for (self.swapchain_image_views) |image_view| {
             c.vkDestroyImageView(self.device, image_view, null);
@@ -93,7 +100,9 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
         .window_height = @intCast(window_height),
         .window_width = @intCast(window_width),
     });
-    try vkp.createGraphicsPipeline(alloc, device.handle);
+
+    const render_pass = try vkr.createRenderPass(device.handle, swapchain.surface_format.format);
+    const pipeline = try vkp.createGraphicsPipeline(alloc, device.handle, render_pass.handle, swapchain.image_extent);
 
     c.SDL_ShowWindow(window);
     
@@ -112,6 +121,9 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
         .swapchain_extent = swapchain.image_extent,
         .swapchain_images = swapchain.images,
         .swapchain_image_views = swapchain.image_views,
+        .render_pass = render_pass.handle,
+        .pipeline_layout = pipeline.layout,
+        .graphics_pipeline = pipeline.graphics_pipeline_handle,
     };
 
     return engine;
