@@ -5,6 +5,7 @@ const vkc = @import("./vulkan/command.zig");
 const vkd = @import("./vulkan/device.zig");
 const vke = @import("./vulkan/error.zig");
 const vks = @import("./vulkan/swapchain.zig");
+const vksync = @import("./vulkan/synchronization.zig");
 const vkp = @import("./vulkan/pipeline.zig");
 const vkr = @import("./vulkan/render_pass.zig");
 
@@ -36,7 +37,12 @@ const VulkanEngine = struct {
     pipeline_layout: c.VkPipelineLayout,
     graphics_pipeline: c.VkPipeline,
 
+    image_available: c.VkSemaphore,
+    render_finished: c.VkSemaphore,
+
     pub fn cleanup(self: *VulkanEngine) void {
+        c.vkDestroySemaphore(self.device, self.render_finished, null);
+        c.vkDestroySemaphore(self.device, self.image_available, null);
         c.vkDestroyCommandPool(self.device, self.graphics_command_pool, null);
         self.allocator.free(self.command_buffers);
 
@@ -80,6 +86,30 @@ const VulkanEngine = struct {
                 }
             }
         }
+    }
+
+    pub fn draw(self: *VulkanEngine) void {
+        var image_index: u32 = undefined;
+        c.vkAcquireNextImageKHR(self.device, self.swapchain, std.math.maxInt(u64), self.image_available, null, &image_index);
+
+        const wait_stages: [1]c.VkPipelineStageFlags = {
+            c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        };
+        
+        const submit_info = std.mem.zeroInit(c.VK_STRUCTURE_TYPE_SUBMIT_INFO, .{
+            .sType = c.VK_STRUCTURE_TYPE_SUBMIT_INFO,
+            .waitSemaphoreCount = 1,
+            .pWaitSemaphores = &self.image_available,
+            .pWaitDstStageMask = &wait_stages,
+            .commandBufferCount = 1,
+            .pCommandBuffers = self.command_buffers[image_index],
+            .signalSemaphoreCount = 1,
+            .pSignalSemaphores = &self.render_finished,
+        });
+
+        try vke.checkResult(c.vkQueueSubmit(self.graphics_queue, 1, &submit_info, null));
+
+
     }
 
     fn recordCommands(self: *VulkanEngine) !void {
@@ -164,6 +194,9 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
     const graphics_command_pool = try vkc.createCommandPool(device.handle, physical_device.queue_indices);
     const command_buffers = try vkc.createCommandBuffers(alloc, device.handle, graphics_command_pool.handle, swapchain_framebuffers.handles.len);
 
+    const s_image_available = try vksync.createSemaphore(device.handle);
+    const s_render_finished = try vksync.createSemaphore(device.handle);
+
     c.SDL_ShowWindow(window);
     
     var engine = VulkanEngine {
@@ -187,6 +220,8 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
         .render_pass = render_pass.handle,
         .pipeline_layout = pipeline.layout,
         .graphics_pipeline = pipeline.graphics_pipeline_handle,
+        .image_available = s_image_available.handle,
+        .render_finished = s_render_finished.handle,
     };
 
     try engine.recordCommands();
