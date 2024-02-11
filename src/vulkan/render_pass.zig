@@ -2,8 +2,8 @@ const std = @import("std");
 const c = @import("../clibs.zig");
 const vke = @import ("./error.zig");
 
-const RenderPass = struct {
-    handle: c.VkRenderPass = undefined,
+pub const RenderPass = struct {
+    handle: c.VkRenderPass = null,
 };
 
 pub fn createRenderPass(device: c.VkDevice, swapchain_format: c.VkFormat) !RenderPass {

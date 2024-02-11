@@ -1,6 +1,7 @@
 const std = @import("std");
 const c = @import("clibs.zig");
 const vki = @import("./vulkan/instance.zig");
+const vkc = @import("./vulkan/command.zig");
 const vkd = @import("./vulkan/device.zig");
 const vke = @import("./vulkan/error.zig");
 const vks = @import("./vulkan/swapchain.zig");
@@ -23,13 +24,28 @@ const VulkanEngine = struct {
     swapchain: c.VkSwapchainKHR,
     swapchain_image_format: c.VkFormat,
     swapchain_extent: c.VkExtent2D,
+
     swapchain_images: []c.VkImage,
     swapchain_image_views: []c.VkImageView,
+    swapchain_framebuffers: []c.VkFramebuffer,
+    command_buffers: []c.VkCommandBuffer,
+
+    graphics_command_pool: c.VkCommandPool,
+
     render_pass: c.VkRenderPass,
     pipeline_layout: c.VkPipelineLayout,
     graphics_pipeline: c.VkPipeline,
 
     pub fn cleanup(self: *VulkanEngine) void {
+        c.vkDestroyCommandPool(self.device, self.graphics_command_pool, null);
+        self.allocator.free(self.command_buffers);
+
+        for (self.swapchain_framebuffers) |framebuffer| {
+            c.vkDestroyFramebuffer(self.device, framebuffer, null);
+        }
+
+        self.allocator.free(self.swapchain_framebuffers);
+
         c.vkDestroyPipeline(self.device, self.graphics_pipeline, null);
         c.vkDestroyPipelineLayout(self.device, self.pipeline_layout, null);
         c.vkDestroyRenderPass(self.device, self.render_pass, null);
@@ -63,6 +79,47 @@ const VulkanEngine = struct {
                    quit = true;
                 }
             }
+        }
+    }
+
+    fn recordCommands(self: *VulkanEngine) !void {
+        const buffer_begin_info = std.mem.zeroInit(c.VkCommandBufferBeginInfo, .{
+            .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+            .flags = c.VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT,
+        });
+
+        const color_clear_value = c.VkClearValue {
+            .color = .{ .float32 = [_]f32{0.6, 0.65, 0.4, 1.0}}
+        };
+
+        var clear_values = [1]c.VkClearValue{
+            color_clear_value,
+        };
+
+        var render_pass_begin_info = std.mem.zeroInit(c.VkRenderPassBeginInfo, .{
+            .sType = c.VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+            .renderPass = self.render_pass,
+            .renderArea = .{
+                .offset = .{ 
+                    .x = 0, 
+                    .y = 0,
+                },
+                .extent = self.swapchain_extent,
+            },
+            .clearValueCount = @as(u32, @intCast(clear_values.len)),
+            .pClearValues = &clear_values,
+        });
+
+        for (self.command_buffers, 0..) |command_buffer, i| {
+            try vke.checkResult(c.vkBeginCommandBuffer(command_buffer, &buffer_begin_info));
+
+            render_pass_begin_info.framebuffer = self.swapchain_framebuffers[i];
+            c.vkCmdBeginRenderPass(command_buffer, &render_pass_begin_info, c.VK_SUBPASS_CONTENTS_INLINE);
+            c.vkCmdBindPipeline(command_buffer, c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.graphics_pipeline);
+            c.vkCmdDraw(command_buffer, 3, 1, 0, 0);
+            c.vkCmdEndRenderPass(command_buffer);
+            
+            try vke.checkResult(c.vkEndCommandBuffer(command_buffer));
         }
     }
 };
@@ -103,6 +160,9 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
 
     const render_pass = try vkr.createRenderPass(device.handle, swapchain.surface_format.format);
     const pipeline = try vkp.createGraphicsPipeline(alloc, device.handle, render_pass.handle, swapchain.image_extent);
+    const swapchain_framebuffers = try vks.createFramebuffer(alloc, device.handle, swapchain, render_pass.handle);
+    const graphics_command_pool = try vkc.createCommandPool(device.handle, physical_device.queue_indices);
+    const command_buffers = try vkc.createCommandBuffers(alloc, device.handle, graphics_command_pool.handle, swapchain_framebuffers.handles.len);
 
     c.SDL_ShowWindow(window);
     
@@ -121,10 +181,15 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
         .swapchain_extent = swapchain.image_extent,
         .swapchain_images = swapchain.images,
         .swapchain_image_views = swapchain.image_views,
+        .swapchain_framebuffers = swapchain_framebuffers.handles,
+        .command_buffers = command_buffers.handles,
+        .graphics_command_pool = graphics_command_pool.handle,
         .render_pass = render_pass.handle,
         .pipeline_layout = pipeline.layout,
         .graphics_pipeline = pipeline.graphics_pipeline_handle,
     };
+
+    try engine.recordCommands();
 
     return engine;
 }

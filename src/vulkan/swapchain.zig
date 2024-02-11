@@ -22,6 +22,10 @@ pub const SwapchainImage = struct {
     image_view: c.VkImageView,
 };
 
+pub const SwapchainFramebuffers = struct {
+    handles: []c.VkFramebuffer = &.{},
+};
+
 pub const SwapchainDetails = struct {
     /// Surface properties, e.g. image size and extent
     surface_capabilities: c.VkSurfaceCapabilitiesKHR = undefined,
@@ -127,6 +131,32 @@ pub fn createSwapchain(a: std.mem.Allocator, physical_device: c.VkPhysicalDevice
         .image_extent = image_extent,
         .images = images,
         .image_views = image_views,
+    };
+}
+
+pub fn createFramebuffer(a: std.mem.Allocator, device: c.VkDevice, swapchain: Swapchain, render_pass: c.VkRenderPass) !SwapchainFramebuffers {
+
+    const framebuffers = try a.alloc(c.VkFramebuffer, swapchain.images.len);
+    for (swapchain.image_views, framebuffers) |image_view, *framebuffer| {
+        const attachments = [1]c.VkImageView{
+            image_view,
+        };
+
+        var framebuffer_create_info = std.mem.zeroInit(c.VkFramebufferCreateInfo, .{
+            .sType = c.VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+            .renderPass = render_pass,
+            .attachmentCount = @as(u32, @intCast(attachments.len)),
+            .pAttachments = &attachments,
+            .width = swapchain.image_extent.width,
+            .height = swapchain.image_extent.height,
+            .layers = 1,
+        });
+
+        try vke.checkResult(c.vkCreateFramebuffer(device, &framebuffer_create_info, null, framebuffer));
+    }
+
+    return .{
+        .handles = framebuffers,
     };
 }
 
