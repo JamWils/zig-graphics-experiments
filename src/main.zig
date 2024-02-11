@@ -13,5 +13,5 @@ pub fn main() !void {
     };
     defer engine.cleanup();
 
-    engine.run();
+    try engine.run();
 }

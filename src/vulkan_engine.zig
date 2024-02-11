@@ -41,6 +41,8 @@ const VulkanEngine = struct {
     render_finished: c.VkSemaphore,
 
     pub fn cleanup(self: *VulkanEngine) void {
+        _ = c.vkDeviceWaitIdle(self.device);
+
         c.vkDestroySemaphore(self.device, self.render_finished, null);
         c.vkDestroySemaphore(self.device, self.image_available, null);
         c.vkDestroyCommandPool(self.device, self.graphics_command_pool, null);
@@ -74,8 +76,7 @@ const VulkanEngine = struct {
         c.SDL_DestroyWindow(self.window);
     }
 
-    pub fn run(self: *VulkanEngine) void {
-        _ = self;
+    pub fn run(self: *VulkanEngine) !void {
         var quit = false;
 
         var event: c.SDL_Event = undefined;
@@ -84,32 +85,43 @@ const VulkanEngine = struct {
                 if (event.type == c.SDL_QUIT) {
                    quit = true;
                 }
+
+                try self.draw();
             }
         }
     }
 
-    pub fn draw(self: *VulkanEngine) void {
+    pub fn draw(self: *VulkanEngine) !void {
         var image_index: u32 = undefined;
-        c.vkAcquireNextImageKHR(self.device, self.swapchain, std.math.maxInt(u64), self.image_available, null, &image_index);
+        try vke.checkResult(c.vkAcquireNextImageKHR(self.device, self.swapchain, std.math.maxInt(u64), self.image_available, null, &image_index));
 
-        const wait_stages: [1]c.VkPipelineStageFlags = {
-            c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        const wait_stages: [1]c.VkPipelineStageFlags = .{
+            c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
         };
         
-        const submit_info = std.mem.zeroInit(c.VK_STRUCTURE_TYPE_SUBMIT_INFO, .{
+        const submit_info = std.mem.zeroInit(c.VkSubmitInfo, .{
             .sType = c.VK_STRUCTURE_TYPE_SUBMIT_INFO,
             .waitSemaphoreCount = 1,
             .pWaitSemaphores = &self.image_available,
             .pWaitDstStageMask = &wait_stages,
             .commandBufferCount = 1,
-            .pCommandBuffers = self.command_buffers[image_index],
+            .pCommandBuffers = &self.command_buffers[image_index],
             .signalSemaphoreCount = 1,
             .pSignalSemaphores = &self.render_finished,
         });
 
         try vke.checkResult(c.vkQueueSubmit(self.graphics_queue, 1, &submit_info, null));
 
+        const present_info = std.mem.zeroInit(c.VkPresentInfoKHR, .{
+            .sType = c.VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+            .waitSemaphoreCount = 1,
+            .pWaitSemaphores = &self.render_finished,
+            .swapchainCount = 1,
+            .pSwapchains = &self.swapchain,
+            .pImageIndices = &image_index,
+        });
 
+        try vke.checkResult(c.vkQueuePresentKHR(self.presentation_queue, &present_info));
     }
 
     fn recordCommands(self: *VulkanEngine) !void {
@@ -119,7 +131,7 @@ const VulkanEngine = struct {
         });
 
         const color_clear_value = c.VkClearValue {
-            .color = .{ .float32 = [_]f32{0.6, 0.65, 0.4, 1.0}}
+            .color = .{ .float32 = [_]f32{0.3, 0.3, 0.4, 1.0}}
         };
 
         var clear_values = [1]c.VkClearValue{
