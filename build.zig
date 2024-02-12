@@ -7,7 +7,7 @@ pub fn build(b: *std.Build) !void {
     _ = writer;
 
     const exe = b.addExecutable(.{
-        .name = "vulkan-experiments",
+        .name = "graphics-experiments",
         .root_source_file = .{ .path = "src/main.zig" },
         .target = target,
         .optimize = optimize,
