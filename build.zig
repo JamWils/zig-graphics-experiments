@@ -36,18 +36,31 @@ pub fn build(b: *std.Build) !void {
 
     const root_target = target.result;
 
-    const vk_lib_name = if(root_target.os.tag == .windows) "vulkan-1" else "vulkan";
-    exe.linkSystemLibrary(vk_lib_name);
-    if (b.graph.env_map.get("VK_SDK_PATH")) |path| {
-        exe.addLibraryPath(.{ .cwd_relative = std.fmt.allocPrint(b.allocator, "{s}/Lib", .{ path }) catch @panic("Could not add Vulkan library") });
-        exe.addIncludePath(.{ .cwd_relative = std.fmt.allocPrint(b.allocator, "{s}/Include", .{ path }) catch @panic("Could not add Vulkan headers")});
-    }
+    switch (root_target.os.tag) {
+        .windows => {
+            compileShaders(b);
+            const vk_lib_name = if(root_target.os.tag == .windows) "vulkan-1" else "vulkan";
+            exe.linkSystemLibrary(vk_lib_name);
+            if (b.env_map.get("VK_SDK_PATH")) |path| {
+                exe.addLibraryPath(.{ .cwd_relative = std.fmt.allocPrint(b.allocator, "{s}/Lib", .{ path }) catch @panic("Could not add Vulkan library") });
+                exe.addIncludePath(.{ .cwd_relative = std.fmt.allocPrint(b.allocator, "{s}/Include", .{ path }) catch @panic("Could not add Vulkan headers")});
+            }
 
-    exe.linkSystemLibrary("SDL2");
-    exe.addLibraryPath(.{ .cwd_relative = "thirdparty/sdl2/lib" });
-    exe.addIncludePath(.{ .cwd_relative = "thirdparty/sdl2/include" });
-
-    exe.addIncludePath(.{ .path = "thirdparty/vma"});
+            exe.linkSystemLibrary("SDL2");
+            exe.addLibraryPath(.{ .cwd_relative = "thirdparty/sdl2/lib" });
+            exe.addIncludePath(.{ .cwd_relative = "thirdparty/sdl2/include" });
+            exe.addIncludePath(.{ .path = "thirdparty/vma"});
+        },
+        .macos => {
+            const lazy_path: std.Build.LazyPath = .{
+                .path = "thirdparty/macos/frameworks"
+            };
+            exe.addFrameworkPath(lazy_path);
+            exe.linkFramework("SDL2");
+            exe.addRPath(lazy_path);
+        },
+        else => unreachable
+    } 
 
 
     // This declares intent for the executable to be installed into the
