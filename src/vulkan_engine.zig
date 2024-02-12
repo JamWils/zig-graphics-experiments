@@ -10,6 +10,7 @@ const vkp = @import("./vulkan/pipeline.zig");
 const vkr = @import("./vulkan/render_pass.zig");
 
 const log = std.log.scoped(.vulkan_engine);
+const max_frame_draws = 2;
 const vk_alloc_callbacks: ?*c.VkAllocationCallbacks = null;
 
 const VulkanEngine = struct {
@@ -37,14 +38,26 @@ const VulkanEngine = struct {
     pipeline_layout: c.VkPipelineLayout,
     graphics_pipeline: c.VkPipeline,
 
-    image_available: c.VkSemaphore,
-    render_finished: c.VkSemaphore,
+    image_available_semaphores: []c.VkSemaphore,
+    render_finished_semaphores: []c.VkSemaphore,
+    draw_fences: []c.VkFence,
+
+    current_frame: usize = 0,
 
     pub fn cleanup(self: *VulkanEngine) void {
+
         _ = c.vkDeviceWaitIdle(self.device);
 
-        c.vkDestroySemaphore(self.device, self.render_finished, null);
-        c.vkDestroySemaphore(self.device, self.image_available, null);
+        for (0..max_frame_draws) |i| {
+            c.vkDestroyFence(self.device, self.draw_fences[i], null);
+            c.vkDestroySemaphore(self.device, self.render_finished_semaphores[i], null); 
+            c.vkDestroySemaphore(self.device, self.image_available_semaphores[i], null); 
+        }
+
+        self.allocator.free(self.draw_fences);
+        self.allocator.free(self.render_finished_semaphores);
+        self.allocator.free(self.image_available_semaphores);
+
         c.vkDestroyCommandPool(self.device, self.graphics_command_pool, null);
         self.allocator.free(self.command_buffers);
 
@@ -85,15 +98,25 @@ const VulkanEngine = struct {
                 if (event.type == c.SDL_QUIT) {
                    quit = true;
                 }
-
+    
                 try self.draw();
             }
         }
     }
 
     pub fn draw(self: *VulkanEngine) !void {
+        try vke.checkResult(c.vkWaitForFences(self.device, 1, &self.draw_fences[self.current_frame], c.VK_TRUE, std.math.maxInt(u64)));
+        try vke.checkResult(c.vkResetFences(self.device, 1, &self.draw_fences[self.current_frame]));
+
         var image_index: u32 = undefined;
-        try vke.checkResult(c.vkAcquireNextImageKHR(self.device, self.swapchain, std.math.maxInt(u64), self.image_available, null, &image_index));
+        try vke.checkResult(c.vkAcquireNextImageKHR(
+            self.device, 
+            self.swapchain, 
+            std.math.maxInt(u64), 
+            self.image_available_semaphores[self.current_frame], 
+            null, 
+            &image_index
+        ));
 
         const wait_stages: [1]c.VkPipelineStageFlags = .{
             c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
@@ -102,32 +125,34 @@ const VulkanEngine = struct {
         const submit_info = std.mem.zeroInit(c.VkSubmitInfo, .{
             .sType = c.VK_STRUCTURE_TYPE_SUBMIT_INFO,
             .waitSemaphoreCount = 1,
-            .pWaitSemaphores = &self.image_available,
+            .pWaitSemaphores = &self.image_available_semaphores[self.current_frame],
             .pWaitDstStageMask = &wait_stages,
             .commandBufferCount = 1,
             .pCommandBuffers = &self.command_buffers[image_index],
             .signalSemaphoreCount = 1,
-            .pSignalSemaphores = &self.render_finished,
+            .pSignalSemaphores = &self.render_finished_semaphores[self.current_frame],
         });
 
-        try vke.checkResult(c.vkQueueSubmit(self.graphics_queue, 1, &submit_info, null));
+        try vke.checkResult(c.vkQueueSubmit(self.graphics_queue, 1, &submit_info, self.draw_fences[self.current_frame]));
 
         const present_info = std.mem.zeroInit(c.VkPresentInfoKHR, .{
             .sType = c.VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
             .waitSemaphoreCount = 1,
-            .pWaitSemaphores = &self.render_finished,
+            .pWaitSemaphores = &self.render_finished_semaphores[self.current_frame],
             .swapchainCount = 1,
             .pSwapchains = &self.swapchain,
             .pImageIndices = &image_index,
         });
 
         try vke.checkResult(c.vkQueuePresentKHR(self.presentation_queue, &present_info));
+
+        self.current_frame = (self.current_frame + 1) % max_frame_draws;
     }
 
     fn recordCommands(self: *VulkanEngine) !void {
         const buffer_begin_info = std.mem.zeroInit(c.VkCommandBufferBeginInfo, .{
             .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-            .flags = c.VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT,
+            // .flags = c.VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT,
         });
 
         const color_clear_value = c.VkClearValue {
@@ -206,8 +231,9 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
     const graphics_command_pool = try vkc.createCommandPool(device.handle, physical_device.queue_indices);
     const command_buffers = try vkc.createCommandBuffers(alloc, device.handle, graphics_command_pool.handle, swapchain_framebuffers.handles.len);
 
-    const s_image_available = try vksync.createSemaphore(device.handle);
-    const s_render_finished = try vksync.createSemaphore(device.handle);
+    const image_available_semaphores = try vksync.createSemaphores(alloc, device.handle, max_frame_draws);
+    const render_finished_semaphores = try vksync.createSemaphores(alloc, device.handle, max_frame_draws);
+    const draw_fences = try vksync.createFences(alloc, device.handle, max_frame_draws);
 
     c.SDL_ShowWindow(window);
     
@@ -232,8 +258,9 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
         .render_pass = render_pass.handle,
         .pipeline_layout = pipeline.layout,
         .graphics_pipeline = pipeline.graphics_pipeline_handle,
-        .image_available = s_image_available.handle,
-        .render_finished = s_render_finished.handle,
+        .image_available_semaphores = image_available_semaphores.handles,
+        .render_finished_semaphores = render_finished_semaphores.handles,
+        .draw_fences = draw_fences.handles,
     };
 
     try engine.recordCommands();
