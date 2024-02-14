@@ -9,7 +9,7 @@ const vksync = @import("./vulkan/synchronization.zig");
 const vkp = @import("./vulkan/pipeline.zig");
 const vkr = @import("./vulkan/render_pass.zig");
 const mesh_mod = @import("./mesh/mesh.zig");
-const vk_mesh = @import("./vulkan/mesh.zig");
+const vkb = @import("./vulkan/buffer.zig");
 const vec3 = @import("./glmath/vec3.zig");
 
 const log = std.log.scoped(.vulkan_engine);
@@ -47,7 +47,7 @@ const VulkanEngine = struct {
 
     current_frame: usize = 0,
 
-    first_mesh_buffer: vk_mesh.Buffer,
+    first_mesh_buffer: vkb.VertexBuffer,
 
     pub fn cleanup(self: *VulkanEngine) void {
 
@@ -268,7 +268,7 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
     };
     defer alloc.free(simple_mesh.vertices);
 
-    const first_mesh_buffer = try vk_mesh.createVertexBuffer(physical_device.handle, device.handle, simple_mesh.vertices);
+    const first_mesh_buffer = try vkb.createVertexBuffer(physical_device.handle, device.handle, simple_mesh.vertices);
 
     const swapchain = try vks.createSwapchain(alloc, physical_device.handle, device.handle, surface, .{
         .graphics_queue_index = physical_device.queue_indices.graphics_queue_location,
