@@ -2,6 +2,7 @@ const std = @import("std");
 const c = @import("../clibs.zig");
 const vke = @import ("./error.zig");
 const shader = @import("./shader.zig");
+const mesh = @import("../mesh/mesh.zig");
 
 const Pipeline = struct {
     graphics_pipeline_handle: c.VkPipeline,
@@ -29,14 +30,29 @@ pub fn createGraphicsPipeline(a: std.mem.Allocator, device: c.VkDevice, render_p
     var shader_stages = [2]c.VkPipelineShaderStageCreateInfo {
         vertex_shader_create_info,
         frag_shader_create_info,
+    }; 
+
+    const binding_description: c.VkVertexInputBindingDescription = .{
+        .binding = 0,
+        .stride = @sizeOf(mesh.Vertex),
+        .inputRate = c.VK_VERTEX_INPUT_RATE_VERTEX,
+    };
+
+    const attribute_descriptions: [1]c.VkVertexInputAttributeDescription = .{
+        .{
+            .binding = 0,
+            .location = 0,
+            .format = c.VK_FORMAT_R32G32B32_SFLOAT,
+            .offset = @offsetOf(mesh.Vertex, "position"),
+        }
     };
 
     const vertex_input_create_info = std.mem.zeroInit(c.VkPipelineVertexInputStateCreateInfo, .{
         .sType = c.VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-        .vertexBindingDescriptionCount = 0,
-        .pVertexBindingDescriptions = null,
-        .vertexAttributeDescriptionCount = 0,
-        .pVertexAttributeDescriptions = null,
+        .vertexBindingDescriptionCount = 1,
+        .pVertexBindingDescriptions = &binding_description,
+        .vertexAttributeDescriptionCount = @as(u32, @intCast(attribute_descriptions.len)),
+        .pVertexAttributeDescriptions = &attribute_descriptions,
     });
 
     const input_assembly_create_info = std.mem.zeroInit(c.VkPipelineInputAssemblyStateCreateInfo, .{

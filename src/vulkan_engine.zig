@@ -8,6 +8,9 @@ const vks = @import("./vulkan/swapchain.zig");
 const vksync = @import("./vulkan/synchronization.zig");
 const vkp = @import("./vulkan/pipeline.zig");
 const vkr = @import("./vulkan/render_pass.zig");
+const mesh_mod = @import("./mesh/mesh.zig");
+const vk_mesh = @import("./vulkan/mesh.zig");
+const vec3 = @import("./glmath/vec3.zig");
 
 const log = std.log.scoped(.vulkan_engine);
 const max_frame_draws = 2;
@@ -44,9 +47,13 @@ const VulkanEngine = struct {
 
     current_frame: usize = 0,
 
+    first_mesh_buffer: vk_mesh.Buffer,
+
     pub fn cleanup(self: *VulkanEngine) void {
 
         _ = c.vkDeviceWaitIdle(self.device);
+
+        self.first_mesh_buffer.deleteAndFree(self.device);
 
         for (0..max_frame_draws) |i| {
             c.vkDestroyFence(self.device, self.draw_fences[i], null);
@@ -183,7 +190,18 @@ const VulkanEngine = struct {
             render_pass_begin_info.framebuffer = self.swapchain_framebuffers[i];
             c.vkCmdBeginRenderPass(command_buffer, &render_pass_begin_info, c.VK_SUBPASS_CONTENTS_INLINE);
             c.vkCmdBindPipeline(command_buffer, c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.graphics_pipeline);
-            c.vkCmdDraw(command_buffer, 3, 1, 0, 0);
+            
+            const vertex_buffers = [_]c.VkBuffer{
+                self.first_mesh_buffer.handle,
+            };
+
+            const offsets = [_]c.VkDeviceSize{
+                0,
+            };
+
+            c.vkCmdBindVertexBuffers(command_buffer, 0, 1, &vertex_buffers, &offsets);
+
+            c.vkCmdDraw(command_buffer, self.first_mesh_buffer.vertex_count, 1, 0, 0);
             c.vkCmdEndRenderPass(command_buffer);
             
             try vke.checkResult(c.vkEndCommandBuffer(command_buffer));
@@ -218,6 +236,22 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
     const physical_device = try vkd.getPhysicalDevice(alloc, instance.handle, surface, &required_device_extensions);
     const device = try vkd.createLogicalDevice(alloc, physical_device, &required_device_extensions);
     
+    const vertices: [6]mesh_mod.Vertex = .{
+        .{ .position = vec3.init(0.4, -0.4, 0.0)},
+        .{ .position = vec3.init(0.4, 0.4, 0.0)},
+        .{ .position = vec3.init(-0.4, 0.4, 0.0)},
+        .{ .position = vec3.init(-0.4, 0.4, 0.0)},
+        .{ .position = vec3.init(-0.4, -0.4, 0.0)},
+        .{ .position = vec3.init(0.4, -0.4, 0.0)},
+    };
+
+    const simple_mesh = mesh_mod.Mesh{
+        .vertices = alloc.dupe(mesh_mod.Vertex, vertices[0..]) catch @panic("Out of memory"),
+    };
+    defer alloc.free(simple_mesh.vertices);
+
+    const first_mesh_buffer = try vk_mesh.createVertexBuffer(physical_device.handle, device.handle, simple_mesh.vertices);
+
     const swapchain = try vks.createSwapchain(alloc, physical_device.handle, device.handle, surface, .{
         .graphics_queue_index = physical_device.queue_indices.graphics_queue_location,
         .presentation_queue_index = physical_device.queue_indices.presentation_queue_location,
@@ -261,6 +295,7 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
         .image_available_semaphores = image_available_semaphores.handles,
         .render_finished_semaphores = render_finished_semaphores.handles,
         .draw_fences = draw_fences.handles,
+        .first_mesh_buffer = first_mesh_buffer,
     };
 
     try engine.recordCommands();

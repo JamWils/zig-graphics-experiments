@@ -107,7 +107,7 @@ pub fn getPhysicalDevice(alloc: std.mem.Allocator, instance: c.VkInstance, surfa
             .queue_family_indicies => |qfi| {
                 physical_device.handle = device;
                 physical_device.queue_indices = qfi;
-                std.debug.print("Set the physical device handle", .{});
+                std.debug.print("Set the physical device handle\n", .{});
                 break :device_loop;
             }
         }
