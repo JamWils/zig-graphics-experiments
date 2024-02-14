@@ -237,12 +237,30 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
     const device = try vkd.createLogicalDevice(alloc, physical_device, &required_device_extensions);
     
     const vertices: [6]mesh_mod.Vertex = .{
-        .{ .position = vec3.init(0.4, -0.4, 0.0)},
-        .{ .position = vec3.init(0.4, 0.4, 0.0)},
-        .{ .position = vec3.init(-0.4, 0.4, 0.0)},
-        .{ .position = vec3.init(-0.4, 0.4, 0.0)},
-        .{ .position = vec3.init(-0.4, -0.4, 0.0)},
-        .{ .position = vec3.init(0.4, -0.4, 0.0)},
+        .{ 
+            .position = vec3.init(0.4, -0.4, 0.0), 
+            .color = vec3.init(1, 0, 0),
+        },
+        .{ 
+            .position = vec3.init(0.4, 0.4, 0.0),
+            .color = vec3.init(0, 1, 0),
+        },
+        .{ 
+            .position = vec3.init(-0.4, 0.4, 0.0),
+            .color = vec3.init(0, 0, 1),
+        },
+        .{ 
+            .position = vec3.init(-0.4, 0.4, 0.0),
+            .color = vec3.init(0, 0, 1),
+        },
+        .{ 
+            .position = vec3.init(-0.4, -0.4, 0.0),
+            .color = vec3.init(1, 1, 0),
+        },
+        .{ 
+            .position = vec3.init(0.4, -0.4, 0.0),
+            .color = vec3.init(1, 0, 0),
+        },
     };
 
     const simple_mesh = mesh_mod.Mesh{

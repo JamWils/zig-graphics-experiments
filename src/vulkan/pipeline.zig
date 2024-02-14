@@ -27,7 +27,7 @@ pub fn createGraphicsPipeline(a: std.mem.Allocator, device: c.VkDevice, render_p
         .pName = "main",
     });
 
-    var shader_stages = [2]c.VkPipelineShaderStageCreateInfo {
+    var shader_stages = [_]c.VkPipelineShaderStageCreateInfo {
         vertex_shader_create_info,
         frag_shader_create_info,
     }; 
@@ -38,12 +38,18 @@ pub fn createGraphicsPipeline(a: std.mem.Allocator, device: c.VkDevice, render_p
         .inputRate = c.VK_VERTEX_INPUT_RATE_VERTEX,
     };
 
-    const attribute_descriptions: [1]c.VkVertexInputAttributeDescription = .{
+    const attribute_descriptions = [_]c.VkVertexInputAttributeDescription{
         .{
             .binding = 0,
             .location = 0,
             .format = c.VK_FORMAT_R32G32B32_SFLOAT,
             .offset = @offsetOf(mesh.Vertex, "position"),
+        },
+        .{
+            .binding = 0,
+            .location = 1,
+            .format = c.VK_FORMAT_R32G32B32_SFLOAT,
+            .offset = @offsetOf(mesh.Vertex, "color"),
         }
     };
 
