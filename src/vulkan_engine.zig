@@ -268,8 +268,6 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
     };
     defer alloc.free(simple_mesh.vertices);
 
-    const first_mesh_buffer = try vkb.createVertexBuffer(physical_device.handle, device.handle, simple_mesh.vertices);
-
     const swapchain = try vks.createSwapchain(alloc, physical_device.handle, device.handle, surface, .{
         .graphics_queue_index = physical_device.queue_indices.graphics_queue_location,
         .presentation_queue_index = physical_device.queue_indices.presentation_queue_location,
@@ -286,6 +284,13 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
     const image_available_semaphores = try vksync.createSemaphores(alloc, device.handle, max_frame_draws);
     const render_finished_semaphores = try vksync.createSemaphores(alloc, device.handle, max_frame_draws);
     const draw_fences = try vksync.createFences(alloc, device.handle, max_frame_draws);
+
+    const first_mesh_buffer = try vkb.createVertexBuffer(simple_mesh.vertices, .{
+        .device = device.handle,
+        .physical_device = physical_device.handle,
+        .transfer_queue = device.graphics_queue,
+        .transfer_command_pool = graphics_command_pool.handle,
+    });
 
     c.SDL_ShowWindow(window);
     
