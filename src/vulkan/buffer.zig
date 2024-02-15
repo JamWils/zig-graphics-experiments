@@ -24,7 +24,7 @@ pub const VertexBufferOpts = struct {
     transfer_command_pool: c.VkCommandPool, 
 };
 
-pub const Buffer = struct {
+const Buffer = struct {
     handle: [*c] c.VkBuffer = undefined,
     memory: [*c] c.VkDeviceMemory = undefined,
 
@@ -34,14 +34,20 @@ pub const Buffer = struct {
     }
 };
 
-pub const VertexBuffer = struct {
-    handle: c.VkBuffer,
-    memory: c.VkDeviceMemory,
-    count: u32,
+pub const MeshBuffer = struct {
+    vertex_buffer: c.VkBuffer,
+    vertex_memory: c.VkDeviceMemory,
+    vertex_count: u32,
 
-    pub fn deleteAndFree(self: *VertexBuffer, device: c.VkDevice) void {
-        c.vkDestroyBuffer(device, self.handle, null);
-        c.vkFreeMemory(device, self.memory, null);
+    index_buffer: c.VkBuffer,
+    index_memory: c.VkDeviceMemory,
+    index_count: u32,
+
+    pub fn deleteAndFree(self: *MeshBuffer, device: c.VkDevice) void {
+        c.vkDestroyBuffer(device, self.vertex_buffer, null);
+        c.vkFreeMemory(device, self.vertex_memory, null);
+        c.vkDestroyBuffer(device, self.index_buffer, null);
+        c.vkFreeMemory(device, self.index_memory, null);
     }
 };
 
@@ -109,7 +115,7 @@ fn copyBuffer(src_buffer: c.VkBuffer, dst_buffer: c.VkBuffer, buffer_size: c.VkD
     try vke.checkResult(c.vkQueueWaitIdle(opts.transfer_queue));
 }
 
-pub fn createVertexBuffer(vertices: []mesh.Vertex, opts: VertexBufferOpts) !VertexBuffer {
+pub fn createVertexBuffer(vertices: []mesh.Vertex, opts: VertexBufferOpts) !MeshBuffer {
     const buffer_size = @sizeOf(mesh.Vertex) * vertices.len;
 
     var staging_buffer_handle: c.VkBuffer = undefined;
@@ -155,13 +161,16 @@ pub fn createVertexBuffer(vertices: []mesh.Vertex, opts: VertexBufferOpts) !Vert
     });
 
     return .{
-        .handle = vertex_buffer_handle,
-        .memory = vertex_buffer_memory,
-        .count = @as(u32, @intCast(vertices.len)),
+        .vertex_buffer = vertex_buffer_handle,
+        .vertex_memory = vertex_buffer_memory,
+        .vertex_count = @as(u32, @intCast(vertices.len)),
+        .index_buffer = undefined,
+        .index_memory = undefined,
+        .index_count = 0,
     };
 }
 
-pub fn createIndexBuffer(indices: []u32, opts: VertexBufferOpts) !VertexBuffer {
+pub fn createIndexBuffer(indices: []u32, opts: VertexBufferOpts, mesh_buffer: *MeshBuffer) !void {
     var buffer_size = @sizeOf(u32) * indices.len;
 
     var staging_buffer_handle: c.VkBuffer = undefined;
@@ -209,11 +218,9 @@ pub fn createIndexBuffer(indices: []u32, opts: VertexBufferOpts) !VertexBuffer {
         .command_pool = opts.transfer_command_pool,
     });
 
-    return .{
-        .handle = index_buffer_handle,
-        .memory = index_buffer_memory,
-        .count = @as(u32, @intCast(indices.len)),
-    };
+    mesh_buffer.index_buffer = index_buffer_handle;
+    mesh_buffer.index_memory = index_buffer_memory;
+    mesh_buffer.index_count = @as(u32, @intCast(indices.len));
 }
 
 fn findMemoryTypeIndex(physical_device: c.VkPhysicalDevice, allowed_types: u32, property_flags: c.VkMemoryPropertyFlags) u32 {
