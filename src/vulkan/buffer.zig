@@ -1,12 +1,12 @@
 const std = @import("std");
 const c = @import("../clibs.zig");
-const vke = @import ("./error.zig");
+const vke = @import("./error.zig");
 const mesh = @import("../mesh/mesh.zig");
 
 const BufferOpts = struct {
-    physical_device: c.VkPhysicalDevice, 
-    device: c.VkDevice, 
-    buffer_size: c.VkDeviceSize, 
+    physical_device: c.VkPhysicalDevice,
+    device: c.VkDevice,
+    buffer_size: c.VkDeviceSize,
     buffer_usage: c.VkBufferUsageFlags,
     buffer_properties: c.VkMemoryPropertyFlags,
 };
@@ -18,15 +18,15 @@ const TransferBufferOpts = struct {
 };
 
 pub const VertexBufferOpts = struct {
-    physical_device: c.VkPhysicalDevice, 
-    device: c.VkDevice, 
-    transfer_queue: c.VkQueue, 
-    transfer_command_pool: c.VkCommandPool, 
+    physical_device: c.VkPhysicalDevice,
+    device: c.VkDevice,
+    transfer_queue: c.VkQueue,
+    transfer_command_pool: c.VkCommandPool,
 };
 
 const Buffer = struct {
-    handle: [*c] c.VkBuffer = undefined,
-    memory: [*c] c.VkDeviceMemory = undefined,
+    handle: [*c]c.VkBuffer = undefined,
+    memory: [*c]c.VkDeviceMemory = undefined,
 
     pub fn deleteAndFree(self: *Buffer, device: c.VkDevice) void {
         c.vkDestroyBuffer(device, self.handle, null);
@@ -43,7 +43,7 @@ pub const MeshBuffer = struct {
     index_memory: c.VkDeviceMemory,
     index_count: u32,
 
-    pub fn deleteAndFree(self: *MeshBuffer, device: c.VkDevice) void {
+    pub fn deleteAndFree(self: MeshBuffer, device: c.VkDevice) void {
         c.vkDestroyBuffer(device, self.vertex_buffer, null);
         c.vkFreeMemory(device, self.vertex_memory, null);
         c.vkDestroyBuffer(device, self.index_buffer, null);
@@ -68,7 +68,7 @@ fn createBuffer(buffer: *const Buffer, opts: BufferOpts) !void {
         .sType = c.VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
         .allocationSize = memory_req.size,
         .memoryTypeIndex = findMemoryTypeIndex(
-            opts.physical_device, 
+            opts.physical_device,
             memory_req.memoryTypeBits,
             opts.buffer_properties,
         ),
@@ -124,8 +124,8 @@ pub fn createVertexBuffer(vertices: []mesh.Vertex, opts: VertexBufferOpts) !Mesh
     defer c.vkFreeMemory(opts.device, staging_buffer_memory, null);
 
     const staging_buffer: Buffer = .{
-        .handle = @as([*c] c.VkBuffer, @ptrCast(&staging_buffer_handle)),
-        .memory = @as([*c] c.VkDeviceMemory, @ptrCast(&staging_buffer_memory)),
+        .handle = @as([*c]c.VkBuffer, @ptrCast(&staging_buffer_handle)),
+        .memory = @as([*c]c.VkDeviceMemory, @ptrCast(&staging_buffer_memory)),
     };
     try createBuffer(&staging_buffer, .{
         .physical_device = opts.physical_device,
@@ -143,8 +143,8 @@ pub fn createVertexBuffer(vertices: []mesh.Vertex, opts: VertexBufferOpts) !Mesh
     var vertex_buffer_handle: c.VkBuffer = undefined;
     var vertex_buffer_memory: c.VkDeviceMemory = undefined;
     const vertex_buffer: Buffer = .{
-        .handle = @as([*c] c.VkBuffer, @ptrCast(&vertex_buffer_handle)),
-        .memory = @as([*c] c.VkDeviceMemory, @ptrCast(&vertex_buffer_memory)),
+        .handle = @as([*c]c.VkBuffer, @ptrCast(&vertex_buffer_handle)),
+        .memory = @as([*c]c.VkDeviceMemory, @ptrCast(&vertex_buffer_memory)),
     };
     try createBuffer(&vertex_buffer, .{
         .physical_device = opts.physical_device,
@@ -180,8 +180,8 @@ pub fn createIndexBuffer(indices: []u32, opts: VertexBufferOpts, mesh_buffer: *M
     defer c.vkFreeMemory(opts.device, staging_buffer_memory, null);
 
     const staging_buffer: Buffer = .{
-        .handle = @as([*c] c.VkBuffer, @ptrCast(&staging_buffer_handle)),
-        .memory = @as([*c] c.VkDeviceMemory, @ptrCast(&staging_buffer_memory)),
+        .handle = @as([*c]c.VkBuffer, @ptrCast(&staging_buffer_handle)),
+        .memory = @as([*c]c.VkDeviceMemory, @ptrCast(&staging_buffer_memory)),
     };
 
     try createBuffer(&staging_buffer, .{
@@ -200,8 +200,8 @@ pub fn createIndexBuffer(indices: []u32, opts: VertexBufferOpts, mesh_buffer: *M
     var index_buffer_handle: c.VkBuffer = undefined;
     var index_buffer_memory: c.VkDeviceMemory = undefined;
     const index_buffer: Buffer = .{
-        .handle = @as([*c] c.VkBuffer, @ptrCast(&index_buffer_handle)),
-        .memory = @as([*c] c.VkDeviceMemory, @ptrCast(&index_buffer_memory)),
+        .handle = @as([*c]c.VkBuffer, @ptrCast(&index_buffer_handle)),
+        .memory = @as([*c]c.VkDeviceMemory, @ptrCast(&index_buffer_memory)),
     };
 
     try createBuffer(&index_buffer, .{

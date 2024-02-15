@@ -47,12 +47,15 @@ const VulkanEngine = struct {
 
     current_frame: usize = 0,
 
-    first_mesh_buffer: vkb.MeshBuffer,
+    mesh_buffers: []vkb.MeshBuffer,
 
     pub fn cleanup(self: *VulkanEngine) void {
         _ = c.vkDeviceWaitIdle(self.device);
 
-        self.first_mesh_buffer.deleteAndFree(self.device);
+        for (self.mesh_buffers) |mesh_buffer| {
+            mesh_buffer.deleteAndFree(self.device);
+        }
+        self.allocator.free(self.mesh_buffers);
 
         for (0..max_frame_draws) |i| {
             c.vkDestroyFence(self.device, self.draw_fences[i], null);
@@ -93,6 +96,8 @@ const VulkanEngine = struct {
         }
         c.vkDestroyInstance(self.instance, null);
         c.SDL_DestroyWindow(self.window);
+
+        std.debug.print("Vulkan engine cleanup complete\n", .{});
     }
 
     pub fn run(self: *VulkanEngine) !void {
@@ -190,20 +195,21 @@ const VulkanEngine = struct {
             c.vkCmdBeginRenderPass(command_buffer, &render_pass_begin_info, c.VK_SUBPASS_CONTENTS_INLINE);
             c.vkCmdBindPipeline(command_buffer, c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.graphics_pipeline);
             
-            const vertex_buffers = [_]c.VkBuffer{
-                self.first_mesh_buffer.vertex_buffer,
-            };
+            for (self.mesh_buffers) |mesh_buffer| {
+                const vertex_buffers = [_]c.VkBuffer{
+                    mesh_buffer.vertex_buffer,
+                };
 
-            const offsets = [_]c.VkDeviceSize{
-                0,
-            };
+                const offsets = [_]c.VkDeviceSize{
+                    0,
+                };
 
-            c.vkCmdBindVertexBuffers(command_buffer, 0, 1, &vertex_buffers, &offsets);
-            c.vkCmdBindIndexBuffer(command_buffer, self.first_mesh_buffer.index_buffer, 0, c.VK_INDEX_TYPE_UINT32);
-            c.vkCmdDraw(command_buffer, self.first_mesh_buffer.vertex_count, 1, 0, 0);
-            c.vkCmdDrawIndexed(command_buffer, self.first_mesh_buffer.index_count, 1, 0, 0, 0);
+                c.vkCmdBindVertexBuffers(command_buffer, 0, 1, &vertex_buffers, &offsets);
+                c.vkCmdBindIndexBuffer(command_buffer, mesh_buffer.index_buffer, 0, c.VK_INDEX_TYPE_UINT32);
+                c.vkCmdDrawIndexed(command_buffer, mesh_buffer.index_count, 1, 0, 0, 0);
+            }
+
             c.vkCmdEndRenderPass(command_buffer);
-            
             try vke.checkResult(c.vkEndCommandBuffer(command_buffer));
         }
     }
@@ -235,37 +241,6 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
     checkSdlBool(c.SDL_Vulkan_CreateSurface(window, instance.handle, &surface));
     const physical_device = try vkd.getPhysicalDevice(alloc, instance.handle, surface, &required_device_extensions);
     const device = try vkd.createLogicalDevice(alloc, physical_device, &required_device_extensions);
-    
-    const vertices = [_]mesh_mod.Vertex{
-        .{ 
-            .position = vec3.init(0.4, -0.4, 0.0), 
-            .color = vec3.init(1, 0, 0),
-        },
-        .{ 
-            .position = vec3.init(0.4, 0.4, 0.0),
-            .color = vec3.init(0, 1, 0),
-        },
-        .{ 
-            .position = vec3.init(-0.4, 0.4, 0.0),
-            .color = vec3.init(0, 0, 1),
-        },
-        .{ 
-            .position = vec3.init(-0.4, -0.4, 0.0),
-            .color = vec3.init(1, 1, 0),
-        },
-    };
-
-    const indices = [_]u32{
-        0, 1, 2,
-        2, 3, 0,
-    };
-
-    const simple_mesh = mesh_mod.Mesh{
-        .vertices = alloc.dupe(mesh_mod.Vertex, vertices[0..]) catch @panic("Out of memory"),
-        .indices = alloc.dupe(u32, indices[0..]) catch @panic("Out of memory"),
-    };
-    defer alloc.free(simple_mesh.vertices);
-    defer alloc.free(simple_mesh.indices);
 
     const swapchain = try vks.createSwapchain(alloc, physical_device.handle, device.handle, surface, .{
         .graphics_queue_index = physical_device.queue_indices.graphics_queue_location,
@@ -284,19 +259,94 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
     const render_finished_semaphores = try vksync.createSemaphores(alloc, device.handle, max_frame_draws);
     const draw_fences = try vksync.createFences(alloc, device.handle, max_frame_draws);
 
-    var first_mesh_buffer = try vkb.createVertexBuffer(simple_mesh.vertices, .{
+    const vertices = [_]mesh_mod.Vertex{
+        .{ 
+            .position = vec3.init(-0.1, -0.4, 0.0), 
+            .color = vec3.init(1, 0, 0),
+        },
+        .{ 
+            .position = vec3.init(-0.1, 0.4, 0.0),
+            .color = vec3.init(0, 1, 0),
+        },
+        .{ 
+            .position = vec3.init(-0.9, 0.4, 0.0),
+            .color = vec3.init(0, 0, 1),
+        },
+        .{ 
+            .position = vec3.init(-0.9, -0.4, 0.0),
+            .color = vec3.init(1, 1, 0),
+        },
+    };
+
+    const vertices_two = [_]mesh_mod.Vertex{
+        .{ 
+            .position = vec3.init(0.9, -0.2, 0.0), 
+            .color = vec3.init(1, 0, 0),
+        },
+        .{ 
+            .position = vec3.init(0.9, 0.2, 0.0),
+            .color = vec3.init(0, 1, 0),
+        },
+        .{ 
+            .position = vec3.init(0.1, 0.2, 0.0),
+            .color = vec3.init(0, 0, 1),
+        },
+        .{ 
+            .position = vec3.init(0.1, -0.2, 0.0),
+            .color = vec3.init(1, 1, 0),
+        },
+    };
+
+    const indices = [_]u32{
+        0, 1, 2,
+        2, 3, 0,
+    };
+
+    const first_mesh = mesh_mod.Mesh{
+        .vertices = alloc.dupe(mesh_mod.Vertex, vertices[0..]) catch @panic("Out of memory"),
+        .indices = alloc.dupe(u32, indices[0..]) catch @panic("Out of memory"),
+    };
+    defer alloc.free(first_mesh.vertices);
+    defer alloc.free(first_mesh.indices);
+
+    const second_mesh = mesh_mod.Mesh{
+        .vertices = alloc.dupe(mesh_mod.Vertex, vertices_two[0..]) catch @panic("Out of memory"),
+        .indices = alloc.dupe(u32, indices[0..]) catch @panic("Out of memory"),
+    };
+    defer alloc.free(second_mesh.vertices);
+    defer alloc.free(second_mesh.indices);
+
+    var first_mesh_buffer = try vkb.createVertexBuffer(first_mesh.vertices, .{
         .device = device.handle,
         .physical_device = physical_device.handle,
         .transfer_queue = device.graphics_queue,
         .transfer_command_pool = graphics_command_pool.handle,
     });
 
-    try vkb.createIndexBuffer(simple_mesh.indices, .{
+    try vkb.createIndexBuffer(first_mesh.indices, .{
         .device = device.handle,
         .physical_device = physical_device.handle,
         .transfer_queue = device.graphics_queue,
         .transfer_command_pool = graphics_command_pool.handle,
     }, &first_mesh_buffer);
+
+    var second_mesh_buffer = try vkb.createVertexBuffer(second_mesh.vertices, .{
+        .device = device.handle,
+        .physical_device = physical_device.handle,
+        .transfer_queue = device.graphics_queue,
+        .transfer_command_pool = graphics_command_pool.handle,
+    });
+
+    try vkb.createIndexBuffer(second_mesh.indices, .{
+        .device = device.handle,
+        .physical_device = physical_device.handle,
+        .transfer_queue = device.graphics_queue,
+        .transfer_command_pool = graphics_command_pool.handle,
+    }, &second_mesh_buffer);
+
+    var mesh_buffers = try alloc.alloc(vkb.MeshBuffer, 2);
+    mesh_buffers[0] = first_mesh_buffer;
+    mesh_buffers[1] = second_mesh_buffer;
 
     c.SDL_ShowWindow(window);
     
@@ -324,7 +374,7 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
         .image_available_semaphores = image_available_semaphores.handles,
         .render_finished_semaphores = render_finished_semaphores.handles,
         .draw_fences = draw_fences.handles,
-        .first_mesh_buffer = first_mesh_buffer,
+        .mesh_buffers = mesh_buffers,
     };
 
     try engine.recordCommands();
