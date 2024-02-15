@@ -7,4 +7,5 @@ pub const Vertex = struct {
 
 pub const Mesh = struct {
     vertices: []Vertex,
+    indices: []u32,
 };

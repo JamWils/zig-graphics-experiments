@@ -37,7 +37,7 @@ pub const Buffer = struct {
 pub const VertexBuffer = struct {
     handle: c.VkBuffer,
     memory: c.VkDeviceMemory,
-    vertex_count: u32,
+    count: u32,
 
     pub fn deleteAndFree(self: *VertexBuffer, device: c.VkDevice) void {
         c.vkDestroyBuffer(device, self.handle, null);
@@ -157,7 +157,62 @@ pub fn createVertexBuffer(vertices: []mesh.Vertex, opts: VertexBufferOpts) !Vert
     return .{
         .handle = vertex_buffer_handle,
         .memory = vertex_buffer_memory,
-        .vertex_count = @as(u32, @intCast(vertices.len)),
+        .count = @as(u32, @intCast(vertices.len)),
+    };
+}
+
+pub fn createIndexBuffer(indices: []u32, opts: VertexBufferOpts) !VertexBuffer {
+    var buffer_size = @sizeOf(u32) * indices.len;
+
+    var staging_buffer_handle: c.VkBuffer = undefined;
+    defer c.vkDestroyBuffer(opts.device, staging_buffer_handle, null);
+
+    var staging_buffer_memory: c.VkDeviceMemory = undefined;
+    defer c.vkFreeMemory(opts.device, staging_buffer_memory, null);
+
+    const staging_buffer: Buffer = .{
+        .handle = @as([*c] c.VkBuffer, @ptrCast(&staging_buffer_handle)),
+        .memory = @as([*c] c.VkDeviceMemory, @ptrCast(&staging_buffer_memory)),
+    };
+
+    try createBuffer(&staging_buffer, .{
+        .physical_device = opts.physical_device,
+        .device = opts.device,
+        .buffer_properties = c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        .buffer_size = buffer_size,
+        .buffer_usage = c.VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+    });
+
+    var staging_data: ?*align(@alignOf(u32)) anyopaque = undefined;
+    try vke.checkResult(c.vkMapMemory(opts.device, staging_buffer_memory, 0, buffer_size, 0, &staging_data));
+    @memcpy(@as([*]u32, @ptrCast(staging_data)), indices);
+    c.vkUnmapMemory(opts.device, staging_buffer_memory);
+
+    var index_buffer_handle: c.VkBuffer = undefined;
+    var index_buffer_memory: c.VkDeviceMemory = undefined;
+    const index_buffer: Buffer = .{
+        .handle = @as([*c] c.VkBuffer, @ptrCast(&index_buffer_handle)),
+        .memory = @as([*c] c.VkDeviceMemory, @ptrCast(&index_buffer_memory)),
+    };
+
+    try createBuffer(&index_buffer, .{
+        .physical_device = opts.physical_device,
+        .device = opts.device,
+        .buffer_properties = c.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        .buffer_size = buffer_size,
+        .buffer_usage = c.VK_BUFFER_USAGE_TRANSFER_DST_BIT | c.VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+    });
+
+    try copyBuffer(staging_buffer_handle, index_buffer_handle, buffer_size, .{
+        .device = opts.device,
+        .transfer_queue = opts.transfer_queue,
+        .command_pool = opts.transfer_command_pool,
+    });
+
+    return .{
+        .handle = index_buffer_handle,
+        .memory = index_buffer_memory,
+        .count = @as(u32, @intCast(indices.len)),
     };
 }
 
