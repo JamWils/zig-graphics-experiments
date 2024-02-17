@@ -1,6 +1,6 @@
 const std = @import("std");
 
-pub fn build(b: *std.Build) void {
+pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
     const writer = std.io.getStdErr().writer();
@@ -13,16 +13,32 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    const zmath_dep = b.dependency("zmath", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    const module = b.addModule("zmath", .{
+        .root_source_file = .{ .path = "src/zmath.zig" },
+        .imports = &.{
+            .{ .name = "zmath", .module = zmath_dep.module("zmath") },
+        }
+    });
+
+    var iter = module.import_table.iterator();
+    while (iter.next()) |e| {
+        exe.root_module.addImport(e.key_ptr.*, e.value_ptr.*);
+    }
+
     compileShaders(b);
 
     exe.linkLibC();
     exe.linkLibCpp();
 
-    const root_target = (std.zig.system.NativeTargetInfo.detect(exe.target) catch @panic("failed to detect native target info")).target;
-    
+    const root_target = target.result;
+
     const vk_lib_name = if(root_target.os.tag == .windows) "vulkan-1" else "vulkan";
     exe.linkSystemLibrary(vk_lib_name);
-    if (b.env_map.get("VK_SDK_PATH")) |path| {
+    if (b.graph.env_map.get("VK_SDK_PATH")) |path| {
         exe.addLibraryPath(.{ .cwd_relative = std.fmt.allocPrint(b.allocator, "{s}/Lib", .{ path }) catch @panic("Could not add Vulkan library") });
         exe.addIncludePath(.{ .cwd_relative = std.fmt.allocPrint(b.allocator, "{s}/Include", .{ path }) catch @panic("Could not add Vulkan headers")});
     }
@@ -32,6 +48,7 @@ pub fn build(b: *std.Build) void {
     exe.addIncludePath(.{ .cwd_relative = "thirdparty/sdl2/include" });
 
     exe.addIncludePath(.{ .path = "thirdparty/vma"});
+
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
@@ -84,7 +101,7 @@ pub fn build(b: *std.Build) void {
 fn compileShaders(b: *std.Build) void {
     const shaders_dir = if (@hasDecl(@TypeOf(b.build_root.handle), "openIterableDir"))
         b.build_root.handle.openIterableDir("shaders", .{}) catch @panic("Failed to open shaders iterable directory")
-    else b.build.root.handle.openDir("shaders", .{ .iterate = true }) catch @panic("Failed to open shaders directory");
+    else std.fs.cwd().openDir("shaders", .{ .iterate = true }) catch @panic("Failed to open shaders directory");
 
     var dir_iterator = shaders_dir.iterate();
     while(dir_iterator.next() catch @panic("cannot iterate directory")) |item| {

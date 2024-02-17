@@ -1,0 +1,14 @@
+.{
+    .name = "graphics-experiments",
+    .version = "0.1.0",
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "libs",
+        "README.md",
+        "LICENSE",
+    },
+    .dependencies = .{
+        .zmath = .{ .path = "libs/zmath" },
+    }
+}

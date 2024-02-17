@@ -1,8 +1,6 @@
-const vec3 = @import("../glmath/vec3.zig");
-
 pub const Vertex = struct {
-    position: vec3,
-    color: vec3,
+    position: @Vector(3, f32),
+    color: @Vector(3, f32),
 };
 
 pub const Mesh = struct {
