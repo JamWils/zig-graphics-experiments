@@ -2,6 +2,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 const VulkanEngine = @import("vulkan_engine.zig");
 const MetalEngine = @import("metal_engine.zig");
+const darwin = @import("darwin");
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};

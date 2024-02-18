@@ -7,7 +7,7 @@ pub fn build(b: *std.Build) !void {
     _ = writer;
 
     const exe = b.addExecutable(.{
-        .name = "graphics-experiments",
+        .name = "vulkan-experiments",
         .root_source_file = .{ .path = "src/main.zig" },
         .target = target,
         .optimize = optimize,
@@ -29,8 +29,6 @@ pub fn build(b: *std.Build) !void {
         exe.root_module.addImport(e.key_ptr.*, e.value_ptr.*);
     }
 
-    compileShaders(b);
-
     exe.linkLibC();
     exe.linkLibCpp();
 
@@ -41,7 +39,7 @@ pub fn build(b: *std.Build) !void {
             compileShaders(b);
             const vk_lib_name = if(root_target.os.tag == .windows) "vulkan-1" else "vulkan";
             exe.linkSystemLibrary(vk_lib_name);
-            if (b.env_map.get("VK_SDK_PATH")) |path| {
+            if (b.graph.env_map.get("VK_SDK_PATH")) |path| {
                 exe.addLibraryPath(.{ .cwd_relative = std.fmt.allocPrint(b.allocator, "{s}/Lib", .{ path }) catch @panic("Could not add Vulkan library") });
                 exe.addIncludePath(.{ .cwd_relative = std.fmt.allocPrint(b.allocator, "{s}/Include", .{ path }) catch @panic("Could not add Vulkan headers")});
             }
@@ -58,10 +56,18 @@ pub fn build(b: *std.Build) !void {
             exe.addFrameworkPath(lazy_path);
             exe.linkFramework("SDL2");
             exe.addRPath(lazy_path);
+
+
+            exe.root_module.addImport("darwin", b.dependency("darwin", .{
+                .target = target,
+                .optimize = optimize,
+            }).module("darwin"));
+
         },
         else => unreachable
     } 
 
+    
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
@@ -88,25 +94,16 @@ pub fn build(b: *std.Build) !void {
         run_cmd.addArgs(args);
     }
 
-    // This creates a build step. It will be visible in the `zig build --help` menu,
-    // and can be selected like this: `zig build run`
-    // This will evaluate the `run` step rather than the default, which is "install".
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
 
-    // Creates a step for unit testing. This only builds the test executable
-    // but does not run it.
     const unit_tests = b.addTest(.{
         .root_source_file = .{ .path = "src/main.zig" },
         .target = target,
         .optimize = optimize,
     });
-
     const run_unit_tests = b.addRunArtifact(unit_tests);
 
-    // Similar to creating the run step earlier, this exposes a `test` step to
-    // the `zig build --help` menu, providing a way for the user to request
-    // running the unit tests.
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_unit_tests.step);
 }
