@@ -28,7 +28,7 @@ pub fn createSemaphore(device: c.VkDevice) !Semaphore {
 }
 
 pub fn createSemaphores(a: std.mem.Allocator, device: c.VkDevice, semaphore_count: usize) !Semaphores {
-    var semaphores: []c.VkSemaphore = try a.alloc(c.VkSemaphore, semaphore_count);
+    const semaphores: []c.VkSemaphore = try a.alloc(c.VkSemaphore, semaphore_count);
 
     for (semaphores) |*semaphore| {
         const create_info = std.mem.zeroInit(c.VkSemaphoreCreateInfo, .{
@@ -44,7 +44,7 @@ pub fn createSemaphores(a: std.mem.Allocator, device: c.VkDevice, semaphore_coun
 }
 
 pub fn createFences(a: std.mem.Allocator, device: c.VkDevice, semaphore_count: usize) !Fences {
-    var fences: []c.VkFence = try a.alloc(c.VkFence, semaphore_count);
+    const fences: []c.VkFence = try a.alloc(c.VkFence, semaphore_count);
 
     for (fences) |*fence| {
         const create_info = std.mem.zeroInit(c.VkFenceCreateInfo, .{

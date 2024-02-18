@@ -33,7 +33,7 @@ pub fn createCommandBuffers(a: std.mem.Allocator, device: c.VkDevice, command_po
         .commandBufferCount = @as(u32, @intCast(framebuffer_len)),
     });
 
-    var command_buffers: []c.VkCommandBuffer = try a.alloc(c.VkCommandBuffer, framebuffer_len);
+    const command_buffers: []c.VkCommandBuffer = try a.alloc(c.VkCommandBuffer, framebuffer_len);
     try vke.checkResult(c.vkAllocateCommandBuffers(device, &cb_alloc_info, command_buffers.ptr));
 
     return .{

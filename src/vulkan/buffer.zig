@@ -24,13 +24,13 @@ pub const VertexBufferOpts = struct {
     transfer_command_pool: c.VkCommandPool,
 };
 
-const Buffer = struct {
+pub const Buffer = struct {
     handle: [*c]c.VkBuffer = undefined,
     memory: [*c]c.VkDeviceMemory = undefined,
 
-    pub fn deleteAndFree(self: *Buffer, device: c.VkDevice) void {
-        c.vkDestroyBuffer(device, self.handle, null);
-        c.vkFreeMemory(device, self.memory, null);
+    pub fn deleteAndFree(self: Buffer, device: c.VkDevice) void {
+        c.vkDestroyBuffer(device, self.handle.*, null);
+        c.vkFreeMemory(device, self.memory.*, null);
     }
 };
 
@@ -51,7 +51,7 @@ pub const MeshBuffer = struct {
     }
 };
 
-fn createBuffer(buffer: *const Buffer, opts: BufferOpts) !void {
+pub fn createBuffer(buffer: *const Buffer, opts: BufferOpts) !void {
     const buffer_create_info = std.mem.zeroInit(c.VkBufferCreateInfo, .{
         .sType = c.VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .size = opts.buffer_size,
@@ -171,7 +171,7 @@ pub fn createVertexBuffer(vertices: []mesh.Vertex, opts: VertexBufferOpts) !Mesh
 }
 
 pub fn createIndexBuffer(indices: []u32, opts: VertexBufferOpts, mesh_buffer: *MeshBuffer) !void {
-    var buffer_size = @sizeOf(u32) * indices.len;
+    const buffer_size = @sizeOf(u32) * indices.len;
 
     var staging_buffer_handle: c.VkBuffer = undefined;
     defer c.vkDestroyBuffer(opts.device, staging_buffer_handle, null);

@@ -4,14 +4,21 @@ const vke = @import ("./error.zig");
 const shader = @import("./shader.zig");
 const mesh = @import("../mesh/mesh.zig");
 
+const GraphicsPipelineOpts = struct {
+    device: c.VkDevice,
+    render_pass: c.VkRenderPass,
+    descriptor_set_layout: c.VkDescriptorSetLayout,
+    swapchain_extent: c.VkExtent2D,
+};
+
 const Pipeline = struct {
     graphics_pipeline_handle: c.VkPipeline,
     layout: c.VkPipelineLayout = undefined,
 };
 
-pub fn createGraphicsPipeline(a: std.mem.Allocator, device: c.VkDevice, render_pass: c.VkRenderPass, swapchain_extent: c.VkExtent2D) !Pipeline {
-    const vertex_shader = try shader.createShaderModule(a, device, "zig-out/shaders/shader.vert.spv");
-    const fragment_shader = try shader.createShaderModule(a, device, "zig-out/shaders/shader.frag.spv");
+pub fn createGraphicsPipeline(a: std.mem.Allocator, opts: GraphicsPipelineOpts) !Pipeline {
+    const vertex_shader = try shader.createShaderModule(a, opts.device, "zig-out/shaders/shader.vert.spv");
+    const fragment_shader = try shader.createShaderModule(a, opts.device, "zig-out/shaders/shader.frag.spv");
 
     const vertex_shader_create_info = std.mem.zeroInit(c.VkPipelineShaderStageCreateInfo, .{
         .sType = c.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
@@ -70,8 +77,8 @@ pub fn createGraphicsPipeline(a: std.mem.Allocator, device: c.VkDevice, render_p
     const viewport = c.VkViewport {
         .x = 0.0,
         .y = 0.0,
-        .width = @as(f32, @floatFromInt(swapchain_extent.width)),
-        .height = @as(f32, @floatFromInt(swapchain_extent.height)),
+        .width = @as(f32, @floatFromInt(opts.swapchain_extent.width)),
+        .height = @as(f32, @floatFromInt(opts.swapchain_extent.height)),
         .minDepth = 0.0,
         .maxDepth = 1.0,
     };
@@ -81,7 +88,7 @@ pub fn createGraphicsPipeline(a: std.mem.Allocator, device: c.VkDevice, render_p
             .x = 0,
             .y = 0,
         }, 
-        .extent = swapchain_extent,
+        .extent = opts.swapchain_extent,
     };
 
     const viewport_create_info = std.mem.zeroInit(c.VkPipelineViewportStateCreateInfo, .{
@@ -99,7 +106,7 @@ pub fn createGraphicsPipeline(a: std.mem.Allocator, device: c.VkDevice, render_p
         .polygonMode = c.VK_POLYGON_MODE_FILL,
         .lineWidth = 1.0,
         .cullMode = c.VK_CULL_MODE_BACK_BIT,
-        .frontFace = c.VK_FRONT_FACE_CLOCKWISE,
+        .frontFace = c.VK_FRONT_FACE_COUNTER_CLOCKWISE,
         .depthBiasEnable = c.VK_FALSE,
     });
 
@@ -130,12 +137,16 @@ pub fn createGraphicsPipeline(a: std.mem.Allocator, device: c.VkDevice, render_p
         .pAttachments = &color_blend_attachment,
     });
 
+    const descriptor_set_layouts = [_]c.VkDescriptorSetLayout{opts.descriptor_set_layout};
+
     const pipeline_layout_create_info = std.mem.zeroInit(c.VkPipelineLayoutCreateInfo, .{
         .sType = c.VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .setLayoutCount = 1,
+        .pSetLayouts = &descriptor_set_layouts[0],
     });
 
     var pipeline_layout: c.VkPipelineLayout = undefined;
-    try vke.checkResult(c.vkCreatePipelineLayout(device, &pipeline_layout_create_info, null, &pipeline_layout));
+    try vke.checkResult(c.vkCreatePipelineLayout(opts.device, &pipeline_layout_create_info, null, &pipeline_layout));
 
     // TODO: Set up depth stencil testing
 
@@ -152,17 +163,17 @@ pub fn createGraphicsPipeline(a: std.mem.Allocator, device: c.VkDevice, render_p
         .pColorBlendState = &color_blending_create_info,
         .pDepthStencilState = null,
         .layout = pipeline_layout,
-        .renderPass = render_pass,
+        .renderPass = opts.render_pass,
         .subpass = 0,
         .basePipelineHandle = null,
         .basePipelineIndex = -1,
     });
 
     var graphics_pipeline: c.VkPipeline = undefined;
-    try vke.checkResult(c.vkCreateGraphicsPipelines(device, null, 1, &graphics_pipeline_create_info, null, &graphics_pipeline));
+    try vke.checkResult(c.vkCreateGraphicsPipelines(opts.device, null, 1, &graphics_pipeline_create_info, null, &graphics_pipeline));
 
-    c.vkDestroyShaderModule(device, fragment_shader, null);
-    c.vkDestroyShaderModule(device, vertex_shader, null);
+    c.vkDestroyShaderModule(opts.device, fragment_shader, null);
+    c.vkDestroyShaderModule(opts.device, vertex_shader, null);
 
     return .{
         .graphics_pipeline_handle = graphics_pipeline,

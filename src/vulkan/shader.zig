@@ -13,8 +13,8 @@ pub fn createShaderModule(a: std.mem.Allocator, device: c.VkDevice, filename: []
 
     const stat = try file.stat();
     const file_size = stat.size;
-    var buffer = try a.alloc(u8, file_size);
-    var data: *const u32 = @alignCast(@ptrCast(buffer.ptr));
+    const buffer = try a.alloc(u8, file_size);
+    const data: *const u32 = @alignCast(@ptrCast(buffer.ptr));
 
     _ = try file.readAll(buffer);
     defer a.free(buffer);

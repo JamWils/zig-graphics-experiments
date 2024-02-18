@@ -114,11 +114,11 @@ pub fn createSwapchain(a: std.mem.Allocator, physical_device: c.VkPhysicalDevice
 
     var swapchain_image_count: u32 = undefined;
     try vke.checkResult(c.vkGetSwapchainImagesKHR(device, swapchain, &swapchain_image_count, null));
-    var images = try a.alloc(c.VkImage, swapchain_image_count);
+    const images = try a.alloc(c.VkImage, swapchain_image_count);
     errdefer a.free(images);
     try vke.checkResult(c.vkGetSwapchainImagesKHR(device, swapchain, &swapchain_image_count, images.ptr));
 
-    var image_views = try a.alloc(c.VkImageView, swapchain_image_count);
+    const image_views = try a.alloc(c.VkImageView, swapchain_image_count);
     errdefer a.free(image_views);
 
     for (images, image_views) |image, *image_view| {
