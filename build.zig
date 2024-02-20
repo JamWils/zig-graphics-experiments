@@ -58,16 +58,17 @@ pub fn build(b: *std.Build) !void {
             exe.addRPath(lazy_path);
 
 
-            exe.root_module.addImport("darwin", b.dependency("darwin", .{
+            exe.root_module.addImport("objc", b.dependency("objc", .{
                 .target = target,
                 .optimize = optimize,
-            }).module("darwin"));
+            }).module("objc"));
+            exe.linkFramework("Foundation");
+            exe.linkFramework("Metal");
+            exe.linkFramework("QuartzCore");
 
         },
         else => unreachable
     } 
-
-    
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default

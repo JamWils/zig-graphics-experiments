@@ -1,11 +1,16 @@
-.{ .name = "graphics-experiments", .version = "0.1.0", .paths = .{
-    "build.zig",
-    "build.zig.zon",
-    "libs",
-    "src",
-    "README.md",
-    "LICENSE",
-}, .dependencies = .{
-    .zmath = .{ .path = "libs/zmath" },
-    .darwin = .{ .path = "libs/darwin" },
-} }
+.{ 
+    .name = "graphics-experiments", 
+    .version = "0.1.0", 
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "libs",
+        "src",
+        "README.md",
+        "LICENSE",
+    }, 
+    .dependencies = .{
+        .zmath = .{ .path = "libs/zmath" },
+        .objc = .{ .path = "libs/objc" },
+    } 
+}

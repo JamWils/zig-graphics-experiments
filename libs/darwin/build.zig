@@ -6,55 +6,41 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     const lib = b.addStaticLibrary(.{
-        .name = "xcode-frameworks",
+        .name = "darwin",
         .root_source_file = b.addWriteFiles().add("empty.c", ""),
         .target = target,
         .optimize = optimize,
     });
 
-    const step = b.step("get-metal", "this will copy the necessary frameworks for Metal");
-    step.makeFn = &getMetalFrameworks;
-    step.dependOn(b.default_step);
-
-    _ = b.addModule("darwin", .{
-        .root_source_file = .{ .path = "./src/main.zig" },
-        .imports = &.{},
-    });
-
     lib.linkLibC();
-
-    const root_target = target.result;
-    switch(root_target.os.tag) {
-        .macos => {
-            const macos_path = "libs/system-sdk/macos";
-            lib.root_module.addFrameworkPath(.{ .path = macos_path ++ "/Frameworks" });
-            lib.root_module.addSystemIncludePath(.{ .path = macos_path ++ "/include" });
-            lib.root_module.addLibraryPath(.{ .path = macos_path ++ "/lib" });
-        },
-        else => {},
-    }
-
+    addPaths(lib);
     b.installArtifact(lib);
 
-    const lib_unit_tests = b.addTest(.{
-        .root_source_file = .{ .path = "src/root.zig" },
-        .target = target,
-        .optimize = optimize,
-    });
+    var step = b.step("get-metal", "this will copy the necessary frameworks for Metal");
+    step.makeFn = &getMetalFrameworks;
+    step.dependOn(b.default_step);
+}
 
-    const run_lib_unit_tests = b.addRunArtifact(lib_unit_tests);
+pub fn addPaths(step: *std.Build.Step.Compile) void {
+    const macos_path = "/libs/system-sdk/macos";
+    step.addSystemFrameworkPath(.{ .cwd_relative = sdkPath(macos_path ++ "/Frameworks") });
+    step.addSystemIncludePath(.{ .cwd_relative = sdkPath(macos_path ++ "/include") });
+    step.addLibraryPath(.{ .cwd_relative = sdkPath(macos_path ++ "/lib") });
+}
 
-    const exe_unit_tests = b.addTest(.{
-        .root_source_file = .{ .path = "src/main.zig" },
-        .target = target,
-        .optimize = optimize,
-    });
+pub fn addPathsToModule(mod: *std.Build.Module) void {
+    const macos_path = "/libs/system-sdk/macos";
+    mod.addSystemFrameworkPath(.{ .cwd_relative = sdkPath(macos_path ++ "/Frameworks") });
+    mod.addSystemIncludePath(.{ .cwd_relative = sdkPath(macos_path ++ "/include") });
+    mod.addLibraryPath(.{ .cwd_relative = sdkPath(macos_path ++ "/lib") });
+}
 
-    const run_exe_unit_tests = b.addRunArtifact(exe_unit_tests);
-
-    const test_step = b.step("test", "Run unit tests");
-    test_step.dependOn(&run_lib_unit_tests.step);
-    test_step.dependOn(&run_exe_unit_tests.step);
+fn sdkPath(comptime suffix: []const u8) []const u8 {
+    if (suffix[0] != '/') @compileError("suffix must be an absolute path");
+    return comptime blk: {
+        const root_dir = std.fs.path.dirname(@src().file) orelse ".";
+        break :blk root_dir ++ suffix;
+    };
 }
 
 fn getMetalFrameworks(_: *std.Build.Step, _: *std.Progress.Node) anyerror!void {
@@ -63,7 +49,6 @@ fn getMetalFrameworks(_: *std.Build.Step, _: *std.Progress.Node) anyerror!void {
     try cwd.deleteTree(dst_macos_path);
     try cwd.makeDir(dst_macos_path);
     try cwd.makeDir(dst_macos_path ++ "/Frameworks");
-    try cwd.makeDir(dst_macos_path ++ "/include");
     try cwd.makeDir(dst_macos_path ++ "/lib");
 
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -74,15 +59,14 @@ fn getMetalFrameworks(_: *std.Build.Step, _: *std.Progress.Node) anyerror!void {
     const sdk_path = "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX14.2.sdk";
     const src_path = sdk_path ++ "/System/Library/Frameworks";
     const dst_path = dst_macos_path ++ "/Frameworks";
+
+    try walkFramework(gpa.allocator(), src_path ++ "/CoreFoundation.framework", dst_path ++ "/CoreFoundation.framework");
     try walkFramework(gpa.allocator(), src_path ++ "/Foundation.framework", dst_path ++ "/Foundation.framework");
     try walkFramework(gpa.allocator(), src_path ++ "/Metal.framework", dst_path ++ "/Metal.framework");
     try walkFramework(gpa.allocator(), src_path ++ "/MetalKit.framework", dst_path ++ "/MetalKit.framework");
     try walkFramework(gpa.allocator(), src_path ++ "/QuartzCore.framework", dst_path ++ "/QuartzCore.framework");
-
-    const src_includes = try cwd.openDir(sdk_path ++ "/usr/include", .{});
-    const dst_includes = try cwd.openDir(dst_macos_path ++ "/include", .{});
-    src_includes.copyFile("libDER/libDER_config.h", dst_includes, "libDER_config.h", .{}) catch |err| std.debug.print("Error copying libDER_config.h: {}\n", .{err});
-    src_includes.copyFile("libDER/DERItem.h", dst_includes, "DERItem.h", .{}) catch |err| std.debug.print("Error copying DERItem.h: {}\n", .{err});
+    try walkFramework(gpa.allocator(), sdk_path ++ "/usr/include", dst_macos_path ++ "/include");
+    try cwd.deleteTree(dst_macos_path ++ "/include/apache2");
 
     const lib_path = sdk_path ++ "/usr/lib";
     const src_lib = try cwd.openDir(lib_path, .{});
