@@ -13,24 +13,30 @@ pub fn build(b: *std.Build) !void {
         .optimize = optimize,
     });
 
-    const zmath_dep = b.dependency("zmath", .{
+    const unit_tests = b.addTest(.{
+        .root_source_file = .{ .path = "src/main.zig" },
         .target = target,
         .optimize = optimize,
     });
-    const module = b.addModule("zmath", .{
-        .root_source_file = .{ .path = "src/zmath.zig" },
+
+    const scene_module = b.addModule("scene", .{
+        .root_source_file = .{ .path = "src/main.zig" },
         .imports = &.{
-            .{ .name = "zmath", .module = zmath_dep.module("zmath") },
+            .{ .name = "scene", .module = b.dependency("scene", .{}).module("scene") },
+            .{ .name = "zmath", .module = b.dependency("zmath", .{}).module("zmath") },
         }
     });
 
-    var iter = module.import_table.iterator();
-    while (iter.next()) |e| {
+    var scene_iter = scene_module.import_table.iterator();
+    while (scene_iter.next()) |e| {
         exe.root_module.addImport(e.key_ptr.*, e.value_ptr.*);
+        unit_tests.root_module.addImport(e.key_ptr.*, e.value_ptr.*);
     }
 
     exe.linkLibC();
+    unit_tests.linkLibC();
     exe.linkLibCpp();
+    unit_tests.linkLibCpp();
 
     const root_target = target.result;
 
@@ -39,15 +45,23 @@ pub fn build(b: *std.Build) !void {
             compileShaders(b);
             const vk_lib_name = if(root_target.os.tag == .windows) "vulkan-1" else "vulkan";
             exe.linkSystemLibrary(vk_lib_name);
+            unit_tests.linkSystemLibrary(vk_lib_name);
             if (b.graph.env_map.get("VK_SDK_PATH")) |path| {
                 exe.addLibraryPath(.{ .cwd_relative = std.fmt.allocPrint(b.allocator, "{s}/Lib", .{ path }) catch @panic("Could not add Vulkan library") });
+                unit_tests.addLibraryPath(.{ .cwd_relative = std.fmt.allocPrint(b.allocator, "{s}/Lib", .{ path }) catch @panic("Could not add Vulkan library") });
                 exe.addIncludePath(.{ .cwd_relative = std.fmt.allocPrint(b.allocator, "{s}/Include", .{ path }) catch @panic("Could not add Vulkan headers")});
+                unit_tests.addIncludePath(.{ .cwd_relative = std.fmt.allocPrint(b.allocator, "{s}/Include", .{ path }) catch @panic("Could not add Vulkan headers")});
             }
 
             exe.linkSystemLibrary("SDL2");
             exe.addLibraryPath(.{ .cwd_relative = "thirdparty/sdl2/lib" });
             exe.addIncludePath(.{ .cwd_relative = "thirdparty/sdl2/include" });
             exe.addIncludePath(.{ .path = "thirdparty/vma"});
+
+            unit_tests.linkSystemLibrary("SDL2");
+            unit_tests.addLibraryPath(.{ .cwd_relative = "thirdparty/sdl2/lib" });
+            unit_tests.addIncludePath(.{ .cwd_relative = "thirdparty/sdl2/include" });
+            unit_tests.addIncludePath(.{ .path = "thirdparty/vma"});
         },
         .macos => {
             const lazy_path: std.Build.LazyPath = .{
@@ -57,6 +71,10 @@ pub fn build(b: *std.Build) !void {
             exe.linkFramework("SDL2");
             exe.addRPath(lazy_path);
 
+            unit_tests.addFrameworkPath(lazy_path);
+            unit_tests.linkFramework("SDL2");
+            unit_tests.addRPath(lazy_path);
+
 
             exe.root_module.addImport("objc", b.dependency("objc", .{
                 .target = target,
@@ -65,6 +83,14 @@ pub fn build(b: *std.Build) !void {
             exe.linkFramework("Foundation");
             exe.linkFramework("Metal");
             exe.linkFramework("QuartzCore");
+
+            unit_tests.root_module.addImport("objc", b.dependency("objc", .{
+                .target = target,
+                .optimize = optimize,
+            }).module("objc"));
+            unit_tests.linkFramework("Foundation");
+            unit_tests.linkFramework("Metal");
+            unit_tests.linkFramework("QuartzCore");
 
         },
         else => unreachable
@@ -98,11 +124,10 @@ pub fn build(b: *std.Build) !void {
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
 
-    const unit_tests = b.addTest(.{
-        .root_source_file = .{ .path = "src/main.zig" },
-        .target = target,
-        .optimize = optimize,
-    });
+    
+
+    
+
     const run_unit_tests = b.addRunArtifact(unit_tests);
 
     const test_step = b.step("test", "Run unit tests");

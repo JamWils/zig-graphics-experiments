@@ -1,7 +1,7 @@
 const std = @import("std");
 const c = @import("../clibs.zig");
 const vke = @import("./error.zig");
-const mesh = @import("../mesh/mesh.zig");
+const scene = @import("scene");
 
 const BufferOpts = struct {
     physical_device: c.VkPhysicalDevice,
@@ -115,8 +115,8 @@ fn copyBuffer(src_buffer: c.VkBuffer, dst_buffer: c.VkBuffer, buffer_size: c.VkD
     try vke.checkResult(c.vkQueueWaitIdle(opts.transfer_queue));
 }
 
-pub fn createVertexBuffer(vertices: []mesh.Vertex, opts: VertexBufferOpts) !MeshBuffer {
-    const buffer_size = @sizeOf(mesh.Vertex) * vertices.len;
+pub fn createVertexBuffer(vertices: []scene.Vertex, opts: VertexBufferOpts) !MeshBuffer {
+    const buffer_size = @sizeOf(scene.Vertex) * vertices.len;
 
     var staging_buffer_handle: c.VkBuffer = undefined;
     defer c.vkDestroyBuffer(opts.device, staging_buffer_handle, null);
@@ -135,9 +135,9 @@ pub fn createVertexBuffer(vertices: []mesh.Vertex, opts: VertexBufferOpts) !Mesh
         .buffer_usage = c.VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
     });
 
-    var staging_data: ?*align(@alignOf(mesh.Vertex)) anyopaque = undefined;
+    var staging_data: ?*align(@alignOf(scene.Vertex)) anyopaque = undefined;
     try vke.checkResult(c.vkMapMemory(opts.device, staging_buffer_memory, 0, buffer_size, 0, &staging_data));
-    @memcpy(@as([*]mesh.Vertex, @ptrCast(staging_data)), vertices);
+    @memcpy(@as([*]scene.Vertex, @ptrCast(staging_data)), vertices);
     c.vkUnmapMemory(opts.device, staging_buffer_memory);
 
     var vertex_buffer_handle: c.VkBuffer = undefined;

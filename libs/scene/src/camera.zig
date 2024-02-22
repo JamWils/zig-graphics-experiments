@@ -1,7 +1,8 @@
 const zmath = @import("zmath");
 
-pub const MVP = struct {
-    model: zmath.Mat,
+
+
+pub const Camera = struct {
     view: zmath.Mat,
     projection: zmath.Mat,
 };

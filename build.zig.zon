@@ -12,5 +12,6 @@
     .dependencies = .{
         .zmath = .{ .path = "libs/zmath" },
         .objc = .{ .path = "libs/objc" },
+        .scene = .{ .path = "libs/scene" },
     } 
 }

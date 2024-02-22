@@ -1,0 +1,14 @@
+.{
+    .name = "scene",
+    .version = "0.0.0",
+
+    .dependencies = .{
+        .zmath = .{ .path = "../zmath" },
+    },
+
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}

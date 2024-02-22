@@ -2,7 +2,7 @@ const std = @import("std");
 const c = @import("../clibs.zig");
 const vke = @import ("./error.zig");
 const shader = @import("./shader.zig");
-const mesh = @import("../mesh/mesh.zig");
+const scene = @import("scene");
 
 const GraphicsPipelineOpts = struct {
     device: c.VkDevice,
@@ -41,7 +41,7 @@ pub fn createGraphicsPipeline(a: std.mem.Allocator, opts: GraphicsPipelineOpts) 
 
     const binding_description: c.VkVertexInputBindingDescription = .{
         .binding = 0,
-        .stride = @sizeOf(mesh.Vertex),
+        .stride = @sizeOf(scene.Vertex),
         .inputRate = c.VK_VERTEX_INPUT_RATE_VERTEX,
     };
 
@@ -50,13 +50,13 @@ pub fn createGraphicsPipeline(a: std.mem.Allocator, opts: GraphicsPipelineOpts) 
             .binding = 0,
             .location = 0,
             .format = c.VK_FORMAT_R32G32B32_SFLOAT,
-            .offset = @offsetOf(mesh.Vertex, "position"),
+            .offset = @offsetOf(scene.Vertex, "position"),
         },
         .{
             .binding = 0,
             .location = 1,
             .format = c.VK_FORMAT_R32G32B32_SFLOAT,
-            .offset = @offsetOf(mesh.Vertex, "color"),
+            .offset = @offsetOf(scene.Vertex, "color"),
         }
     };
 

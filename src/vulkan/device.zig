@@ -9,6 +9,7 @@ pub const PhysicalDevice = struct {
     handle: c.VkPhysicalDevice = null,
     queue_indices: QueueFamilyIndices = undefined,
     use_render_pass: bool = false,
+    min_uniform_buffer_offset_alignment: u64 = 0,
 };
 
 pub const PhysicalDeviceOpts = struct {
@@ -143,6 +144,10 @@ pub fn getPhysicalDevice(alloc: std.mem.Allocator, instance: c.VkInstance, surfa
     if (features_1_3.synchronization2 == c.VK_FALSE) {
         return error.MissingFeatureSynchronization2;
     }
+
+    var device_properties: c.VkPhysicalDeviceProperties = undefined;
+    c.vkGetPhysicalDeviceProperties(physical_device.handle, &device_properties);
+    physical_device.min_uniform_buffer_offset_alignment = device_properties.limits.minUniformBufferOffsetAlignment;
 
     return physical_device;
 }

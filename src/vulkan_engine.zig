@@ -8,14 +8,14 @@ const vks = @import("./vulkan/swapchain.zig");
 const vksync = @import("./vulkan/synchronization.zig");
 const vkp = @import("./vulkan/pipeline.zig");
 const vkr = @import("./vulkan/render_pass.zig");
-const mesh_mod = @import("./mesh/mesh.zig");
 const vkb = @import("./vulkan/buffer.zig");
 const vkds = @import("./vulkan/descriptor_set.zig");
-const scene = @import("./mesh/scene.zig");
+const scene = @import("scene");
 const zmath = @import("zmath");
 
 const log = std.log.scoped(.vulkan_engine);
-const max_frame_draws = 2;
+const max_frame_draws = 3;
+const max_objects = 2;
 const vk_alloc_callbacks: ?*c.VkAllocationCallbacks = null;
 
 const VulkanEngine = struct {
@@ -40,7 +40,9 @@ const VulkanEngine = struct {
     descriptor_set_layout: c.VkDescriptorSetLayout,
     descriptor_pool: c.VkDescriptorPool,
     descriptor_sets: []c.VkDescriptorSet,
-    uniform_buffers: []vkds.UniformBuffer,
+    uniform_buffers: []vkds.BufferSet,
+    model_uniform_alignment: usize,
+    model_transfer_space: []scene.UBO,
 
     graphics_command_pool: c.VkCommandPool,
 
@@ -55,11 +57,15 @@ const VulkanEngine = struct {
     current_frame: usize = 0,
 
     mesh_buffers: []vkb.MeshBuffer,
+    meshes: []scene.Mesh,
 
-    mvp: scene.MVP,
+    camera: scene.Camera,
 
     pub fn cleanup(self: *VulkanEngine) void {
         _ = c.vkDeviceWaitIdle(self.device);
+
+        self.allocator.free(self.meshes);
+        self.allocator.free(self.model_transfer_space);
 
         for (self.mesh_buffers) |mesh_buffer| {
             mesh_buffer.deleteAndFree(self.device);
@@ -121,24 +127,62 @@ const VulkanEngine = struct {
         var quit = false;
 
         var event: c.SDL_Event = undefined;
+
+        var last_time: u64 = c.SDL_GetTicks64();
+        var angle: f32 = 0.0;
         while (!quit) {
             while (c.SDL_PollEvent(&event) != 0) {
                 if (event.type == c.SDL_QUIT) {
                     quit = true;
                 }
-
-                try self.draw();
             }
+
+            const current_time = c.SDL_GetTicks64();
+            const delta_time = current_time - last_time;
+            last_time = current_time;
+
+            angle += 0.01 * @as(f32, @floatFromInt(delta_time));
+            if (angle > 360) {
+                angle -= 360;
+            }
+
+            var m1 = zmath.identity();
+            var m2 = zmath.identity();
+
+            m1 = zmath.mul(zmath.translationV(.{-2, 0, -5, 1}), m1);
+            m1 = zmath.mul(zmath.rotationZ(std.math.degreesToRadians(f32, angle)), m1);
+
+            m2 = zmath.mul(zmath.translationV(.{2, 0, -5, 1}), m2);
+            m2 = zmath.mul(zmath.rotationZ(std.math.degreesToRadians(f32, -angle*20)), m2);
+
+            self.meshes[0].model.model = m1;
+            self.meshes[1].model.model = m2;
+
+            try self.draw();
         }
     }
 
-    pub fn updateUniformBuffer(self: *VulkanEngine, image_index: u32) !void {
-        const uniform_buffer = self.uniform_buffers[image_index];
+    pub fn updateUniformBuffers(self: *VulkanEngine, image_index: u32) !void {
+        const camera_buffer = self.uniform_buffers[image_index].camera;
         var data: ?*align(@alignOf(u32)) anyopaque = undefined;
-        try vke.checkResult(c.vkMapMemory(self.device, uniform_buffer.memory, 0, @sizeOf(scene.MVP), 0, &data));
+        try vke.checkResult(c.vkMapMemory(self.device, camera_buffer.memory, 0, @sizeOf(scene.Camera), 0, &data));
 
-        @memcpy(@as([*]u8, @ptrCast(data)), std.mem.asBytes(&self.mvp));
-        c.vkUnmapMemory(self.device, uniform_buffer.memory);
+        @memcpy(@as([*]u8, @ptrCast(data)), std.mem.asBytes(&self.camera));
+        c.vkUnmapMemory(self.device, camera_buffer.memory);
+
+        const model_buffer = self.uniform_buffers[image_index].model;
+        
+        var object_data: ?*align(@alignOf(scene.UBO)) anyopaque = undefined;
+        var i: usize = 0;
+        while (i < self.meshes.len): (i += 1) {
+            const this_model = &self.model_transfer_space[i];
+            this_model.* = self.meshes[i].model;
+        }
+
+        const copy_size = self.model_uniform_alignment * self.meshes.len;
+        try vke.checkResult(c.vkMapMemory(self.device, model_buffer.memory, 0, copy_size, 0, &object_data));
+        @memcpy(@as([*]scene.UBO, @ptrCast(object_data)), self.model_transfer_space[0..copy_size]);
+        c.vkUnmapMemory(self.device, model_buffer.memory);
     }
 
     pub fn draw(self: *VulkanEngine) !void {
@@ -147,7 +191,7 @@ const VulkanEngine = struct {
 
         var image_index: u32 = undefined;
         try vke.checkResult(c.vkAcquireNextImageKHR(self.device, self.swapchain, std.math.maxInt(u64), self.image_available_semaphores[self.current_frame], null, &image_index));
-        try self.updateUniformBuffer(image_index);
+        try self.updateUniformBuffers(image_index);
         const wait_stages: [1]c.VkPipelineStageFlags = .{
             c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
         };
@@ -212,7 +256,7 @@ const VulkanEngine = struct {
             c.vkCmdBeginRenderPass(command_buffer, &render_pass_begin_info, c.VK_SUBPASS_CONTENTS_INLINE);
             c.vkCmdBindPipeline(command_buffer, c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.graphics_pipeline);
 
-            for (self.mesh_buffers) |mesh_buffer| {
+            for (self.mesh_buffers, 0..) |mesh_buffer, j| {
                 const vertex_buffers = [_]c.VkBuffer{
                     mesh_buffer.vertex_buffer,
                 };
@@ -223,7 +267,9 @@ const VulkanEngine = struct {
 
                 c.vkCmdBindVertexBuffers(command_buffer, 0, 1, &vertex_buffers, &offsets);
                 c.vkCmdBindIndexBuffer(command_buffer, mesh_buffer.index_buffer, 0, c.VK_INDEX_TYPE_UINT32);
-                c.vkCmdBindDescriptorSets(command_buffer, c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipeline_layout, 0, 1, &self.descriptor_sets[i], 0, null);
+
+                const dynamic_offset = @as(u32, @intCast(self.model_uniform_alignment * j));
+                c.vkCmdBindDescriptorSets(command_buffer, c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipeline_layout, 0, 1, &self.descriptor_sets[i], 1, &dynamic_offset);
                 c.vkCmdDrawIndexed(command_buffer, mesh_buffer.index_count, 1, 0, 0, 0);
             }
 
@@ -267,6 +313,8 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
         .window_width = @intCast(window_width),
     });
 
+    const model_uniform_alignment = vkds.pad_with_buffer_offset(@sizeOf(scene.UBO), physical_device.min_uniform_buffer_offset_alignment);
+
     const render_pass = try vkr.createRenderPass(device.handle, swapchain.surface_format.format);
     const descriptor_set_layout = try vkds.createDescriptorSetLayout(device.handle);
     const buffer_count: u32 = @as(u32, @intCast(swapchain.images.len));
@@ -274,9 +322,11 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
         .physical_device = physical_device.handle,
         .device = device.handle,
         .buffer_count = buffer_count,
+        .model_memory_alignment = model_uniform_alignment,
+        .max_objects = max_objects,
     });
     const descriptor_pool = try vkds.createDescriptorPool(device.handle, buffer_count);
-    const descriptor_sets = try vkds.createDescriptorSets(alloc, buffer_count, device.handle, descriptor_pool.handle, descriptor_set_layout.handle, uniform_buffers);
+    const descriptor_sets = try vkds.createDescriptorSets(alloc, buffer_count, device.handle, descriptor_pool.handle, descriptor_set_layout.handle, uniform_buffers, model_uniform_alignment);
 
     const pipeline = try vkp.createGraphicsPipeline(alloc, .{
         .device = device.handle,
@@ -293,47 +343,48 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
     const draw_fences = try vksync.createFences(alloc, device.handle, max_frame_draws);
 
     const dimension: f32 = @as(f32, @floatFromInt(swapchain.image_extent.width)) / @as(f32, @floatFromInt(swapchain.image_extent.height));
-    var mvp = scene.MVP{
-        .model = zmath.identity(),
-        .view = zmath.lookAtRh(.{3, 1, 2, 1}, .{0, 0, 0, 1}, .{0, 1, 0, 1}),
+    var camera = scene.Camera{
+        .view = zmath.lookAtRh(.{0, 0, 2, 1}, .{0, 0, 0, 1}, .{0, 1, 0, 1}),
         .projection = zmath.perspectiveFovRh(std.math.degreesToRadians(f32, 45), dimension, 0.1, 10),
     };
-    mvp.projection[1][1] *= -1;
+    camera.projection[1][1] *= -1;
 
-    const vertices = [_]mesh_mod.Vertex{
+    const model_transfer_space = try vkds.allocate_model_transfer_space(alloc, physical_device.min_uniform_buffer_offset_alignment, max_objects);
+
+    const vertices = [_]scene.Vertex{
         .{
-            .position = .{-0.1, -0.4, 0.0},
+            .position = .{-0.4, 0.4, 0.0},
             .color = .{1, 0, 0},
         },
         .{
-            .position = .{-0.1, 0.4, 0.0},
+            .position = .{-0.4, -0.4, 0.0},
             .color = .{0, 1, 0},
         },
         .{
-            .position = .{-0.9, 0.4, 0.0},
+            .position = .{0.4, -0.4, 0.0},
             .color = .{0, 0, 1},
         },
         .{
-            .position = .{-0.9, -0.4, 0.0},
+            .position = .{0.4, 0.4, 0.0},
             .color = .{1, 1, 0},
         },
     };
 
-    const vertices_two = [_]mesh_mod.Vertex{
+    const vertices_two = [_]scene.Vertex{
         .{
-            .position = .{0.9, -0.2, 0.0},
+            .position = .{-0.25, 0.6, 0.0},
             .color = .{1, 0, 0},
         },
         .{
-            .position = .{0.9, 0.2, 0.0},
+            .position = .{-0.25, -0.6, 0.0},
             .color = .{0, 1, 0},
         },
         .{
-            .position = .{0.1, 0.2, 0.0},
+            .position = .{0.25, -0.6, 0.0},
             .color = .{0, 0, 1},
         },
         .{
-            .position = .{0.1, -0.2, 0.0},
+            .position = .{0.25, 0.6, 0.0},
             .color = .{1, 1, 0},
         },
     };
@@ -343,16 +394,26 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
         2, 3, 0,
     };
 
-    const first_mesh = mesh_mod.Mesh{
-        .vertices = alloc.dupe(mesh_mod.Vertex, vertices[0..]) catch @panic("Out of memory"),
+    const first_mesh = scene.Mesh{
+        .vertices = alloc.dupe(scene.Vertex, vertices[0..]) catch @panic("Out of memory"),
         .indices = alloc.dupe(u32, indices[0..]) catch @panic("Out of memory"),
+        .model = scene.UBO{
+            .model = zmath.identity(),//zmath.rotationZ(std.math.degreesToRadians(f32, 45)),
+        },
     };
     defer alloc.free(first_mesh.vertices);
     defer alloc.free(first_mesh.indices);
 
-    const second_mesh = mesh_mod.Mesh{
-        .vertices = alloc.dupe(mesh_mod.Vertex, vertices_two[0..]) catch @panic("Out of memory"),
+    // var transform = zmath.identity();
+    // const quat = zmath.matToQuat(transform);
+    // zmath.rotate(quat, .{ 0, 1, 0, 0});
+    // transform = zmath.quatToMat(quat);
+    const second_mesh = scene.Mesh{
+        .vertices = alloc.dupe(scene.Vertex, vertices_two[0..]) catch @panic("Out of memory"),
         .indices = alloc.dupe(u32, indices[0..]) catch @panic("Out of memory"),
+        .model = scene.UBO{
+            .model = zmath.identity(),
+        },
     };
     defer alloc.free(second_mesh.vertices);
     defer alloc.free(second_mesh.indices);
@@ -389,6 +450,10 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
     mesh_buffers[0] = first_mesh_buffer;
     mesh_buffers[1] = second_mesh_buffer;
 
+    const meshes = try alloc.alloc(scene.Mesh, 2);
+    meshes[0] = first_mesh;
+    meshes[1] = second_mesh;
+
     c.SDL_ShowWindow(window);
 
     var engine = VulkanEngine{
@@ -415,12 +480,15 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
         .descriptor_pool = descriptor_pool.handle,
         .descriptor_sets = descriptor_sets,
         .uniform_buffers = uniform_buffers,
+        .model_uniform_alignment = model_uniform_alignment,
+        .model_transfer_space = model_transfer_space,
         .graphics_pipeline = pipeline.graphics_pipeline_handle,
         .image_available_semaphores = image_available_semaphores.handles,
         .render_finished_semaphores = render_finished_semaphores.handles,
         .draw_fences = draw_fences.handles,
         .mesh_buffers = mesh_buffers,
-        .mvp = mvp,
+        .meshes = meshes,
+        .camera = camera,
     };
 
     try engine.recordCommands();
