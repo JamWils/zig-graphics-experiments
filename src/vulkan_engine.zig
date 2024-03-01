@@ -15,7 +15,7 @@ const zmath = @import("zmath");
 
 const log = std.log.scoped(.vulkan_engine);
 const max_frame_draws = 3;
-const max_objects = 2;
+const max_objects = 1000;
 const vk_alloc_callbacks: ?*c.VkAllocationCallbacks = null;
 
 const VulkanEngine = struct {
@@ -191,7 +191,10 @@ const VulkanEngine = struct {
 
         var image_index: u32 = undefined;
         try vke.checkResult(c.vkAcquireNextImageKHR(self.device, self.swapchain, std.math.maxInt(u64), self.image_available_semaphores[self.current_frame], null, &image_index));
+
+        try self.recordCommands(image_index);
         try self.updateUniformBuffers(image_index);
+        
         const wait_stages: [1]c.VkPipelineStageFlags = .{
             c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
         };
@@ -223,7 +226,7 @@ const VulkanEngine = struct {
         self.current_frame = (self.current_frame + 1) % max_frame_draws;
     }
 
-    fn recordCommands(self: *VulkanEngine) !void {
+    fn recordCommands(self: *VulkanEngine, current_index: u32) !void {
         const buffer_begin_info = std.mem.zeroInit(c.VkCommandBufferBeginInfo, .{
             .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
             // .flags = c.VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT,
@@ -249,10 +252,10 @@ const VulkanEngine = struct {
             .pClearValues = &clear_values,
         });
 
-        for (self.command_buffers, 0..) |command_buffer, i| {
-            try vke.checkResult(c.vkBeginCommandBuffer(command_buffer, &buffer_begin_info));
+        const command_buffer = self.command_buffers[current_index];
+        try vke.checkResult(c.vkBeginCommandBuffer(command_buffer, &buffer_begin_info));
 
-            render_pass_begin_info.framebuffer = self.swapchain_framebuffers[i];
+            render_pass_begin_info.framebuffer = self.swapchain_framebuffers[current_index];
             c.vkCmdBeginRenderPass(command_buffer, &render_pass_begin_info, c.VK_SUBPASS_CONTENTS_INLINE);
             c.vkCmdBindPipeline(command_buffer, c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.graphics_pipeline);
 
@@ -269,13 +272,12 @@ const VulkanEngine = struct {
                 c.vkCmdBindIndexBuffer(command_buffer, mesh_buffer.index_buffer, 0, c.VK_INDEX_TYPE_UINT32);
 
                 const dynamic_offset = @as(u32, @intCast(self.model_uniform_alignment * j));
-                c.vkCmdBindDescriptorSets(command_buffer, c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipeline_layout, 0, 1, &self.descriptor_sets[i], 1, &dynamic_offset);
+                c.vkCmdBindDescriptorSets(command_buffer, c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipeline_layout, 0, 1, &self.descriptor_sets[current_index], 1, &dynamic_offset);
                 c.vkCmdDrawIndexed(command_buffer, mesh_buffer.index_count, 1, 0, 0, 0);
             }
 
             c.vkCmdEndRenderPass(command_buffer);
             try vke.checkResult(c.vkEndCommandBuffer(command_buffer));
-        }
     }
 };
 
@@ -456,7 +458,7 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
 
     c.SDL_ShowWindow(window);
 
-    var engine = VulkanEngine{
+    const engine = VulkanEngine{
         .allocator = alloc,
         .window = window,
         .instance = instance.handle,
@@ -490,8 +492,6 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
         .meshes = meshes,
         .camera = camera,
     };
-
-    try engine.recordCommands();
 
     return engine;
 }
