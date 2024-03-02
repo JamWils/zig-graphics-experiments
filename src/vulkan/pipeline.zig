@@ -9,6 +9,7 @@ const GraphicsPipelineOpts = struct {
     render_pass: c.VkRenderPass,
     descriptor_set_layout: c.VkDescriptorSetLayout,
     swapchain_extent: c.VkExtent2D,
+    push_constant_range: c.VkPushConstantRange,
 };
 
 const Pipeline = struct {
@@ -143,6 +144,8 @@ pub fn createGraphicsPipeline(a: std.mem.Allocator, opts: GraphicsPipelineOpts) 
         .sType = c.VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
         .setLayoutCount = 1,
         .pSetLayouts = &descriptor_set_layouts[0],
+        .pushConstantRangeCount = 1,
+        .pPushConstantRanges = &opts.push_constant_range,
     });
 
     var pipeline_layout: c.VkPipelineLayout = undefined;

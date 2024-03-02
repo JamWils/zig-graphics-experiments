@@ -8,7 +8,11 @@ layout(set = 0, binding = 0) uniform Camera {
     mat4 projection;
 } camera;
 
-layout(set = 0, binding = 1) uniform UBO {
+// layout(set = 0, binding = 1) uniform UBO {
+//     mat4 model;
+// } ubo;
+
+layout(push_constant) uniform UBO {
     mat4 model;
 } ubo;
 

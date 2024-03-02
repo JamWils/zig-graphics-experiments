@@ -41,8 +41,8 @@ const VulkanEngine = struct {
     descriptor_pool: c.VkDescriptorPool,
     descriptor_sets: []c.VkDescriptorSet,
     uniform_buffers: []vkds.BufferSet,
-    model_uniform_alignment: usize,
-    model_transfer_space: []scene.UBO,
+    // model_uniform_alignment: usize,
+    // model_transfer_space: []scene.UBO,
 
     graphics_command_pool: c.VkCommandPool,
 
@@ -65,7 +65,7 @@ const VulkanEngine = struct {
         _ = c.vkDeviceWaitIdle(self.device);
 
         self.allocator.free(self.meshes);
-        self.allocator.free(self.model_transfer_space);
+        // self.allocator.free(self.model_transfer_space);
 
         for (self.mesh_buffers) |mesh_buffer| {
             mesh_buffer.deleteAndFree(self.device);
@@ -170,19 +170,18 @@ const VulkanEngine = struct {
         @memcpy(@as([*]u8, @ptrCast(data)), std.mem.asBytes(&self.camera));
         c.vkUnmapMemory(self.device, camera_buffer.memory);
 
-        const model_buffer = self.uniform_buffers[image_index].model;
-        
-        var object_data: ?*align(@alignOf(scene.UBO)) anyopaque = undefined;
-        var i: usize = 0;
-        while (i < self.meshes.len): (i += 1) {
-            const this_model = &self.model_transfer_space[i];
-            this_model.* = self.meshes[i].model;
-        }
+        // const model_buffer = self.uniform_buffers[image_index].model;
+        // var object_data: ?*align(@alignOf(scene.UBO)) anyopaque = undefined;
+        // var i: usize = 0;
+        // while (i < self.meshes.len): (i += 1) {
+        //     const this_model = &self.model_transfer_space[i];
+        //     this_model.* = self.meshes[i].model;
+        // }
 
-        const copy_size = self.model_uniform_alignment * self.meshes.len;
-        try vke.checkResult(c.vkMapMemory(self.device, model_buffer.memory, 0, copy_size, 0, &object_data));
-        @memcpy(@as([*]scene.UBO, @ptrCast(object_data)), self.model_transfer_space[0..copy_size]);
-        c.vkUnmapMemory(self.device, model_buffer.memory);
+        // const copy_size = self.model_uniform_alignment * self.meshes.len;
+        // try vke.checkResult(c.vkMapMemory(self.device, model_buffer.memory, 0, copy_size, 0, &object_data));
+        // @memcpy(@as([*]scene.UBO, @ptrCast(object_data)), self.model_transfer_space[0..copy_size]);
+        // c.vkUnmapMemory(self.device, model_buffer.memory);
     }
 
     pub fn draw(self: *VulkanEngine) !void {
@@ -270,9 +269,11 @@ const VulkanEngine = struct {
 
                 c.vkCmdBindVertexBuffers(command_buffer, 0, 1, &vertex_buffers, &offsets);
                 c.vkCmdBindIndexBuffer(command_buffer, mesh_buffer.index_buffer, 0, c.VK_INDEX_TYPE_UINT32);
+                c.vkCmdPushConstants(command_buffer, self.pipeline_layout, c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(scene.UBO), &self.meshes[j].model);
 
-                const dynamic_offset = @as(u32, @intCast(self.model_uniform_alignment * j));
-                c.vkCmdBindDescriptorSets(command_buffer, c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipeline_layout, 0, 1, &self.descriptor_sets[current_index], 1, &dynamic_offset);
+                // const dynamic_offset = @as(u32, @intCast(self.model_uniform_alignment * j));
+                // c.vkCmdBindDescriptorSets(command_buffer, c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipeline_layout, 0, 1, &self.descriptor_sets[current_index], 1, &dynamic_offset);
+                c.vkCmdBindDescriptorSets(command_buffer, c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipeline_layout, 0, 1, &self.descriptor_sets[current_index], 0, null);
                 c.vkCmdDrawIndexed(command_buffer, mesh_buffer.index_count, 1, 0, 0, 0);
             }
 
@@ -330,11 +331,17 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
     const descriptor_pool = try vkds.createDescriptorPool(device.handle, buffer_count);
     const descriptor_sets = try vkds.createDescriptorSets(alloc, buffer_count, device.handle, descriptor_pool.handle, descriptor_set_layout.handle, uniform_buffers, model_uniform_alignment);
 
+    const push_constant_range = c.VkPushConstantRange{
+        .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT,
+        .offset = 0,
+        .size = @sizeOf(scene.UBO),
+    };
     const pipeline = try vkp.createGraphicsPipeline(alloc, .{
         .device = device.handle,
         .swapchain_extent = swapchain.image_extent,
         .render_pass = render_pass.handle,
         .descriptor_set_layout = descriptor_set_layout.handle,
+        .push_constant_range = push_constant_range,
     });
     const swapchain_framebuffers = try vks.createFramebuffer(alloc, device.handle, swapchain, render_pass.handle);
     const graphics_command_pool = try vkc.createCommandPool(device.handle, physical_device.queue_indices);
@@ -351,7 +358,7 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
     };
     camera.projection[1][1] *= -1;
 
-    const model_transfer_space = try vkds.allocate_model_transfer_space(alloc, physical_device.min_uniform_buffer_offset_alignment, max_objects);
+    // const model_transfer_space = try vkds.allocate_model_transfer_space(alloc, physical_device.min_uniform_buffer_offset_alignment, max_objects);
 
     const vertices = [_]scene.Vertex{
         .{
@@ -400,16 +407,12 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
         .vertices = alloc.dupe(scene.Vertex, vertices[0..]) catch @panic("Out of memory"),
         .indices = alloc.dupe(u32, indices[0..]) catch @panic("Out of memory"),
         .model = scene.UBO{
-            .model = zmath.identity(),//zmath.rotationZ(std.math.degreesToRadians(f32, 45)),
+            .model = zmath.identity(),
         },
     };
     defer alloc.free(first_mesh.vertices);
     defer alloc.free(first_mesh.indices);
 
-    // var transform = zmath.identity();
-    // const quat = zmath.matToQuat(transform);
-    // zmath.rotate(quat, .{ 0, 1, 0, 0});
-    // transform = zmath.quatToMat(quat);
     const second_mesh = scene.Mesh{
         .vertices = alloc.dupe(scene.Vertex, vertices_two[0..]) catch @panic("Out of memory"),
         .indices = alloc.dupe(u32, indices[0..]) catch @panic("Out of memory"),
@@ -482,8 +485,8 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
         .descriptor_pool = descriptor_pool.handle,
         .descriptor_sets = descriptor_sets,
         .uniform_buffers = uniform_buffers,
-        .model_uniform_alignment = model_uniform_alignment,
-        .model_transfer_space = model_transfer_space,
+        // .model_uniform_alignment = model_uniform_alignment,
+        // .model_transfer_space = model_transfer_space,
         .graphics_pipeline = pipeline.graphics_pipeline_handle,
         .image_available_semaphores = image_available_semaphores.handles,
         .render_finished_semaphores = render_finished_semaphores.handles,

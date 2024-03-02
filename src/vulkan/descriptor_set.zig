@@ -20,11 +20,11 @@ pub const UniformBufferOpts = struct {
 
 pub const BufferSet = struct {
     camera: UniformBuffer = undefined,
-    model: UniformBuffer = undefined,
+    // model: UniformBuffer = undefined,
 
     pub fn deleteAndFree(self: BufferSet, device: c.VkDevice) void {
         self.camera.deleteAndFree(device);
-        self.model.deleteAndFree(device);
+        // self.model.deleteAndFree(device);
     }
 };
 
@@ -52,15 +52,16 @@ pub fn createDescriptorSetLayout(device: c.VkDevice) !DescriptorSetLayout {
         .pImmutableSamplers = null,
     });
 
-    const model_binding_info = std.mem.zeroInit(c.VkDescriptorSetLayoutBinding, .{
-        .binding = 1,
-        .descriptorType = c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
-        .descriptorCount = 1,
-        .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT,
-        .pImmutableSamplers = null,
-    });
+    // const model_binding_info = std.mem.zeroInit(c.VkDescriptorSetLayoutBinding, .{
+    //     .binding = 1,
+    //     .descriptorType = c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
+    //     .descriptorCount = 1,
+    //     .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT,
+    //     .pImmutableSamplers = null,
+    // });
 
-    const bindings = [_]c.VkDescriptorSetLayoutBinding{ camera_binding_info, model_binding_info};
+    // const bindings = [_]c.VkDescriptorSetLayoutBinding{ camera_binding_info, model_binding_info};
+    const bindings = [_]c.VkDescriptorSetLayoutBinding{ camera_binding_info };
 
     var layout_info = std.mem.zeroInit(c.VkDescriptorSetLayoutCreateInfo, .{
         .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
@@ -78,7 +79,7 @@ pub fn createDescriptorSetLayout(device: c.VkDevice) !DescriptorSetLayout {
 pub fn createUniformBuffers(a: std.mem.Allocator, opts: UniformBufferOpts) ![]BufferSet {
     var buffer_set: []BufferSet = try a.alloc(BufferSet, opts.buffer_count);
 
-    const model_buffer_size = opts.model_memory_alignment * opts.max_objects;
+    // const model_buffer_size = opts.model_memory_alignment * opts.max_objects;
 
     const buffer_size = @sizeOf(scene.Camera);
     for (0..opts.buffer_count) |i| {
@@ -102,25 +103,25 @@ pub fn createUniformBuffers(a: std.mem.Allocator, opts: UniformBufferOpts) ![]Bu
             .memory = buffer.memory.*,
         };
 
-        var model_buffer_handle: c.VkBuffer = undefined;
-        var model_buffer_memory: c.VkDeviceMemory = undefined;
-        const model_buffer = .{
-            .handle = @as([*c]c.VkBuffer, @ptrCast(&model_buffer_handle)),
-            .memory = @as([*c]c.VkDeviceMemory, @ptrCast(&model_buffer_memory)),
-        };
+        // var model_buffer_handle: c.VkBuffer = undefined;
+        // var model_buffer_memory: c.VkDeviceMemory = undefined;
+        // const model_buffer = .{
+        //     .handle = @as([*c]c.VkBuffer, @ptrCast(&model_buffer_handle)),
+        //     .memory = @as([*c]c.VkDeviceMemory, @ptrCast(&model_buffer_memory)),
+        // };
 
-        try vkb.createBuffer(&model_buffer, .{
-            .physical_device = opts.physical_device,
-            .device = opts.device,
-            .buffer_size = model_buffer_size,
-            .buffer_usage = c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            .buffer_properties = c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        });
+        // try vkb.createBuffer(&model_buffer, .{
+        //     .physical_device = opts.physical_device,
+        //     .device = opts.device,
+        //     .buffer_size = model_buffer_size,
+        //     .buffer_usage = c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        //     .buffer_properties = c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        // });
 
-        buffer_set[i].model = .{
-            .handle = model_buffer.handle.*,
-            .memory = model_buffer.memory.*,
-        };
+        // buffer_set[i].model = .{
+        //     .handle = model_buffer.handle.*,
+        //     .memory = model_buffer.memory.*,
+        // };
     }
 
     return buffer_set;
@@ -132,12 +133,13 @@ pub fn createDescriptorPool(device: c.VkDevice, buffer_count: u32) !DescriptorPo
         .descriptorCount = buffer_count,
     });
 
-    const model_pool_sizes = std.mem.zeroInit(c.VkDescriptorPoolSize, .{
-        .type = c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
-        .descriptorCount = buffer_count,
-    });
+    // const model_pool_sizes = std.mem.zeroInit(c.VkDescriptorPoolSize, .{
+    //     .type = c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
+    //     .descriptorCount = buffer_count,
+    // });
 
-    const pool_sizes = [_]c.VkDescriptorPoolSize{ camera_pool_sizes, model_pool_sizes };
+    // const pool_sizes = [_]c.VkDescriptorPoolSize{ camera_pool_sizes, model_pool_sizes };
+    const pool_sizes = [_]c.VkDescriptorPoolSize{ camera_pool_sizes };
 
     const pool_info = std.mem.zeroInit(c.VkDescriptorPoolCreateInfo, .{
         .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
@@ -151,7 +153,7 @@ pub fn createDescriptorPool(device: c.VkDevice, buffer_count: u32) !DescriptorPo
     return .{ .handle = pool };
 }
 
-pub fn createDescriptorSets(a: std.mem.Allocator, buffer_count: u32, device: c.VkDevice, descriptor_pool: c.VkDescriptorPool, descriptor_set_layout: c.VkDescriptorSetLayout, buffer_set: []BufferSet, model_memory_alignment: u64) ![]c.VkDescriptorSet {
+pub fn createDescriptorSets(a: std.mem.Allocator, buffer_count: u32, device: c.VkDevice, descriptor_pool: c.VkDescriptorPool, descriptor_set_layout: c.VkDescriptorSetLayout, buffer_set: []BufferSet, _: u64) ![]c.VkDescriptorSet {
     var layouts = [_]c.VkDescriptorSetLayout{ descriptor_set_layout, descriptor_set_layout };
 
     var alloc_info = std.mem.zeroInit(c.VkDescriptorSetAllocateInfo, .{
@@ -181,23 +183,24 @@ pub fn createDescriptorSets(a: std.mem.Allocator, buffer_count: u32, device: c.V
             .pBufferInfo = &camera_buffer_info,
         });
 
-        const model_buffer_info = std.mem.zeroInit(c.VkDescriptorBufferInfo, .{
-            .buffer = buffer_set[i].model.handle,
-            .offset = 0,
-            .range = model_memory_alignment,
-        });
+        // const model_buffer_info = std.mem.zeroInit(c.VkDescriptorBufferInfo, .{
+        //     .buffer = buffer_set[i].model.handle,
+        //     .offset = 0,
+        //     .range = model_memory_alignment,
+        // });
 
-        const model_set_writes = std.mem.zeroInit(c.VkWriteDescriptorSet, .{
-            .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .dstSet = set,
-            .dstBinding = 1,
-            .dstArrayElement = 0,
-            .descriptorType = c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
-            .descriptorCount = 1,
-            .pBufferInfo = &model_buffer_info,
-        });
+        // const model_set_writes = std.mem.zeroInit(c.VkWriteDescriptorSet, .{
+        //     .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        //     .dstSet = set,
+        //     .dstBinding = 1,
+        //     .dstArrayElement = 0,
+        //     .descriptorType = c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
+        //     .descriptorCount = 1,
+        //     .pBufferInfo = &model_buffer_info,
+        // });
 
-        const descriptor_writes = [_]c.VkWriteDescriptorSet{ camera_set_writes, model_set_writes };
+        // const descriptor_writes = [_]c.VkWriteDescriptorSet{ camera_set_writes, model_set_writes };
+        const descriptor_writes = [_]c.VkWriteDescriptorSet{ camera_set_writes };
         c.vkUpdateDescriptorSets(device, @as(u32, descriptor_writes.len), &descriptor_writes, 0, null);
     }
 
