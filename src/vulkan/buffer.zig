@@ -223,7 +223,7 @@ pub fn createIndexBuffer(indices: []u32, opts: VertexBufferOpts, mesh_buffer: *M
     mesh_buffer.index_count = @as(u32, @intCast(indices.len));
 }
 
-fn findMemoryTypeIndex(physical_device: c.VkPhysicalDevice, allowed_types: u32, property_flags: c.VkMemoryPropertyFlags) u32 {
+pub fn findMemoryTypeIndex(physical_device: c.VkPhysicalDevice, allowed_types: u32, property_flags: c.VkMemoryPropertyFlags) u32 {
     var mem_props: c.VkPhysicalDeviceMemoryProperties = undefined;
     c.vkGetPhysicalDeviceMemoryProperties(physical_device, &mem_props);
 

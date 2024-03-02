@@ -37,6 +37,10 @@ const VulkanEngine = struct {
     swapchain_framebuffers: []c.VkFramebuffer,
     command_buffers: []c.VkCommandBuffer,
 
+    depth_image: c.VkImage,
+    depth_image_memory: c.VkDeviceMemory,
+    depth_image_view: c.VkImageView,
+
     descriptor_set_layout: c.VkDescriptorSetLayout,
     descriptor_pool: c.VkDescriptorPool,
     descriptor_sets: []c.VkDescriptorSet,
@@ -84,6 +88,10 @@ const VulkanEngine = struct {
 
         c.vkDestroyCommandPool(self.device, self.graphics_command_pool, null);
         self.allocator.free(self.command_buffers);
+
+        c.vkDestroyImageView(self.device, self.depth_image_view, null);
+        c.vkDestroyImage(self.device, self.depth_image, null);
+        c.vkFreeMemory(self.device, self.depth_image_memory, null);
 
         for (self.swapchain_framebuffers) |framebuffer| {
             c.vkDestroyFramebuffer(self.device, framebuffer, null);
@@ -149,10 +157,10 @@ const VulkanEngine = struct {
             var m1 = zmath.identity();
             var m2 = zmath.identity();
 
-            m1 = zmath.mul(zmath.translationV(.{-2, 0, -5, 1}), m1);
+            m1 = zmath.mul(zmath.translationV(.{0, 0, -3.5, 1}), m1);
             m1 = zmath.mul(zmath.rotationZ(std.math.degreesToRadians(f32, angle)), m1);
 
-            m2 = zmath.mul(zmath.translationV(.{2, 0, -5, 1}), m2);
+            m2 = zmath.mul(zmath.translationV(.{0, 0, -3, 1}), m2);
             m2 = zmath.mul(zmath.rotationZ(std.math.degreesToRadians(f32, -angle*20)), m2);
 
             self.meshes[0].model.model = m1;
@@ -232,9 +240,11 @@ const VulkanEngine = struct {
         });
 
         const color_clear_value = c.VkClearValue{ .color = .{ .float32 = [_]f32{ 0.3, 0.3, 0.4, 1.0 } } };
+        const depth_clear_value = c.VkClearValue{ .depthStencil = .{ .depth = 1.0, .stencil = 0 } };
 
-        var clear_values = [1]c.VkClearValue{
+        var clear_values: [2]c.VkClearValue = .{
             color_clear_value,
+            depth_clear_value,
         };
 
         var render_pass_begin_info = std.mem.zeroInit(c.VkRenderPassBeginInfo, .{
@@ -318,7 +328,7 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
 
     const model_uniform_alignment = vkds.pad_with_buffer_offset(@sizeOf(scene.UBO), physical_device.min_uniform_buffer_offset_alignment);
 
-    const render_pass = try vkr.createRenderPass(device.handle, swapchain.surface_format.format);
+    const render_pass = try vkr.createRenderPass(physical_device.handle, device.handle, swapchain.surface_format.format);
     const descriptor_set_layout = try vkds.createDescriptorSetLayout(device.handle);
     const buffer_count: u32 = @as(u32, @intCast(swapchain.images.len));
     const uniform_buffers = try vkds.createUniformBuffers(alloc, .{
@@ -343,7 +353,8 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
         .descriptor_set_layout = descriptor_set_layout.handle,
         .push_constant_range = push_constant_range,
     });
-    const swapchain_framebuffers = try vks.createFramebuffer(alloc, device.handle, swapchain, render_pass.handle);
+    const depth_image = try vks.createDepthBufferImage(physical_device.handle, device.handle, swapchain.image_extent);
+    const swapchain_framebuffers = try vks.createFramebuffer(alloc, device.handle, swapchain, depth_image, render_pass.handle);
     const graphics_command_pool = try vkc.createCommandPool(device.handle, physical_device.queue_indices);
     const command_buffers = try vkc.createCommandBuffers(alloc, device.handle, graphics_command_pool.handle, swapchain_framebuffers.handles.len);
 
@@ -386,11 +397,11 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
         },
         .{
             .position = .{-0.25, -0.6, 0.0},
-            .color = .{0, 1, 0},
+            .color = .{1, 1, 0},
         },
         .{
             .position = .{0.25, -0.6, 0.0},
-            .color = .{0, 0, 1},
+            .color = .{1, 0, 1},
         },
         .{
             .position = .{0.25, 0.6, 0.0},
@@ -477,6 +488,9 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
         .swapchain_images = swapchain.images,
         .swapchain_image_views = swapchain.image_views,
         .swapchain_framebuffers = swapchain_framebuffers.handles,
+        .depth_image = depth_image.image,
+        .depth_image_memory = depth_image.memory,
+        .depth_image_view = depth_image.image_view,
         .command_buffers = command_buffers.handles,
         .graphics_command_pool = graphics_command_pool.handle,
         .render_pass = render_pass.handle,

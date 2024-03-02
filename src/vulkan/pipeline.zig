@@ -151,7 +151,14 @@ pub fn createGraphicsPipeline(a: std.mem.Allocator, opts: GraphicsPipelineOpts) 
     var pipeline_layout: c.VkPipelineLayout = undefined;
     try vke.checkResult(c.vkCreatePipelineLayout(opts.device, &pipeline_layout_create_info, null, &pipeline_layout));
 
-    // TODO: Set up depth stencil testing
+    const depth_stencil_create_info = std.mem.zeroInit(c.VkPipelineDepthStencilStateCreateInfo, .{
+        .sType = c.VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+        .depthTestEnable = c.VK_TRUE,
+        .depthWriteEnable = c.VK_TRUE,
+        .depthCompareOp = c.VK_COMPARE_OP_LESS,
+        .depthBoundsTestEnable = c.VK_FALSE,
+        .stencilTestEnable = c.VK_FALSE,
+    });
 
     var graphics_pipeline_create_info = std.mem.zeroInit(c.VkGraphicsPipelineCreateInfo, .{
         .sType = c.VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
@@ -164,7 +171,7 @@ pub fn createGraphicsPipeline(a: std.mem.Allocator, opts: GraphicsPipelineOpts) 
         .pRasterizationState = &rasterization_create_info,
         .pMultisampleState = &multisample_create_info,
         .pColorBlendState = &color_blending_create_info,
-        .pDepthStencilState = null,
+        .pDepthStencilState = &depth_stencil_create_info,
         .layout = pipeline_layout,
         .renderPass = opts.render_pass,
         .subpass = 0,
