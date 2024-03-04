@@ -19,7 +19,7 @@ pub const UniformBufferOpts = struct {
 };
 
 pub const BufferSet = struct {
-    camera: UniformBuffer = undefined,
+    camera: vkb.Buffer = undefined,
     // model: UniformBuffer = undefined,
 
     pub fn deleteAndFree(self: BufferSet, device: c.VkDevice) void {
@@ -28,15 +28,6 @@ pub const BufferSet = struct {
     }
 };
 
-pub const UniformBuffer = struct {
-    handle: c.VkBuffer = undefined,
-    memory: c.VkDeviceMemory = undefined,
-
-    pub fn deleteAndFree(self: UniformBuffer, device: c.VkDevice) void {
-        c.vkDestroyBuffer(device, self.handle, null);
-        c.vkFreeMemory(device, self.memory, null);
-    }
-};
 
 pub const DescriptorPool = struct {
     handle: c.VkDescriptorPool,
@@ -83,14 +74,9 @@ pub fn createUniformBuffers(a: std.mem.Allocator, opts: UniformBufferOpts) ![]Bu
 
     const buffer_size = @sizeOf(scene.Camera);
     for (0..opts.buffer_count) |i| {
-        var staging_buffer_handle: c.VkBuffer = undefined;
-        var staging_buffer_memory: c.VkDeviceMemory = undefined;
-        const buffer = .{
-            .handle = @as([*c]c.VkBuffer, @ptrCast(&staging_buffer_handle)),
-            .memory = @as([*c]c.VkDeviceMemory, @ptrCast(&staging_buffer_memory)),
-        };
+       
 
-        try vkb.createBuffer(&buffer, .{
+        const buffer = try vkb.createBuffer(.{
             .physical_device = opts.physical_device,
             .device = opts.device,
             .buffer_size = buffer_size,
@@ -99,8 +85,8 @@ pub fn createUniformBuffers(a: std.mem.Allocator, opts: UniformBufferOpts) ![]Bu
         });
 
         buffer_set[i].camera = .{
-            .handle = buffer.handle.*,
-            .memory = buffer.memory.*,
+            .handle = buffer.handle,
+            .memory = buffer.memory,
         };
 
         // var model_buffer_handle: c.VkBuffer = undefined;
