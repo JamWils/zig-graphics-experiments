@@ -33,7 +33,7 @@ pub const SwapchainFramebuffers = struct {
     handles: []c.VkFramebuffer = &.{},
 };
 
-const Image = struct {
+pub const Image = struct {
     handle: c.VkImage = null,
     memory: c.VkDeviceMemory = null,
 };
@@ -280,7 +280,7 @@ fn getImageExtent(surface_capabilities: c.VkSurfaceCapabilitiesKHR, window_width
     return extent;
 }
 
-fn createImage(physical_device: c.VkPhysicalDevice, device: c.VkDevice, width: u32, height: u32, format: c.VkFormat, tiling: c.VkImageTiling, usage: c.VkImageUsageFlags, properties: c.VkMemoryPropertyFlags) !Image {
+pub fn createImage(physical_device: c.VkPhysicalDevice, device: c.VkDevice, width: u32, height: u32, format: c.VkFormat, tiling: c.VkImageTiling, usage: c.VkImageUsageFlags, properties: c.VkMemoryPropertyFlags) !Image {
     var image_info = std.mem.zeroInit(c.VkImageCreateInfo, .{
         .sType = c.VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
         .imageType = c.VK_IMAGE_TYPE_2D,
@@ -320,6 +320,50 @@ fn createImage(physical_device: c.VkPhysicalDevice, device: c.VkDevice, width: u
         .handle = image,
         .memory = memory,
     };
+}
+
+pub fn transitionImageLayout(device: c.VkDevice, command_pool: c.VkCommandPool, queue: c.VkQueue, image: c.VkImage, old_layout: c.VkImageLayout, new_layout: c.VkImageLayout) !void {
+    const command_buffer = try vkb.allocAndBeginCommandBuffer(device, command_pool);
+    var barrier = std.mem.zeroInit(c.VkImageMemoryBarrier, .{
+        .sType = c.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .oldLayout = old_layout,
+        .newLayout = new_layout,
+        .srcQueueFamilyIndex = c.VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = c.VK_QUEUE_FAMILY_IGNORED,
+        .image = image,
+        .subresourceRange = .{
+            .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
+            .baseMipLevel = 0,
+            .levelCount = 1,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        },
+    });
+
+    var srcStage: c.VkPipelineStageFlags = 0;
+    var dstStage: c.VkPipelineStageFlags = 0;
+
+    if (old_layout == c.VK_IMAGE_LAYOUT_UNDEFINED and new_layout == c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+        // Memory barrier access stage transition must happen after...
+        barrier.srcAccessMask = 0;
+        // ...and before the transfer write stage
+        barrier.dstAccessMask = c.VK_ACCESS_TRANSFER_WRITE_BIT;
+
+        srcStage = c.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+        dstStage = c.VK_PIPELINE_STAGE_TRANSFER_BIT;
+    } else if (old_layout == c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL and new_layout == c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+        barrier.srcAccessMask = c.VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.dstAccessMask = c.VK_ACCESS_SHADER_READ_BIT;
+
+        srcStage = c.VK_PIPELINE_STAGE_TRANSFER_BIT;
+        dstStage = c.VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    } else {
+        return error.UnsupportedLayoutTransition;
+    }
+
+    c.vkCmdPipelineBarrier(command_buffer, srcStage, dstStage, 0, 0, null, 0, null, 1, &barrier);
+
+    try vkb.endAndFreeCommandBuffer(device, command_pool, command_buffer, queue);
 }
 
 

@@ -11,7 +11,7 @@ const BufferOpts = struct {
     buffer_properties: c.VkMemoryPropertyFlags,
 };
 
-const TransferBufferOpts = struct {
+pub const TransferBufferOpts = struct {
     device: c.VkDevice,
     transfer_queue: c.VkQueue,
     command_pool: c.VkCommandPool,
@@ -85,41 +85,72 @@ pub fn createBuffer(opts: BufferOpts) !Buffer {
     };
 }
 
-fn copyBuffer(src_buffer: c.VkBuffer, dst_buffer: c.VkBuffer, buffer_size: c.VkDeviceSize, opts: TransferBufferOpts) !void {
+pub fn allocAndBeginCommandBuffer(device: c.VkDevice, command_pool: c.VkCommandPool) !c.VkCommandBuffer {
     const alloc_info = std.mem.zeroInit(c.VkCommandBufferAllocateInfo, .{
         .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
         .level = c.VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandPool = opts.command_pool,
+        .commandPool = command_pool,
         .commandBufferCount = 1,
     });
 
-    var transfer_command_buffer: c.VkCommandBuffer = undefined;
-    defer c.vkFreeCommandBuffers(opts.device, opts.command_pool, 1, &transfer_command_buffer);
-    try vke.checkResult(c.vkAllocateCommandBuffers(opts.device, &alloc_info, &transfer_command_buffer));
+    var command_buffer: c.VkCommandBuffer = undefined;
+    try vke.checkResult(c.vkAllocateCommandBuffers(device, &alloc_info, &command_buffer));
 
     const begin_info = std.mem.zeroInit(c.VkCommandBufferBeginInfo, .{
         .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
         .flags = c.VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
     });
 
-    try vke.checkResult(c.vkBeginCommandBuffer(transfer_command_buffer, &begin_info));
+    try vke.checkResult(c.vkBeginCommandBuffer(command_buffer, &begin_info));
+    return command_buffer;
+}
 
+/// End the command buffer and submit it to the queue.
+pub fn endAndFreeCommandBuffer(device: c.VkDevice, command_pool: c.VkCommandPool, command_buffer: c.VkCommandBuffer, queue: c.VkQueue) !void {
+    try vke.checkResult(c.vkEndCommandBuffer(command_buffer));
+
+    const submit_info = std.mem.zeroInit(c.VkSubmitInfo, .{
+        .sType = c.VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &command_buffer,
+    });
+
+    try vke.checkResult(c.vkQueueSubmit(queue, 1, &submit_info, null));
+    try vke.checkResult(c.vkQueueWaitIdle(queue));
+
+    c.vkFreeCommandBuffers(device, command_pool, 1, &command_buffer);
+}
+
+fn copyBuffer(src_buffer: c.VkBuffer, dst_buffer: c.VkBuffer, buffer_size: c.VkDeviceSize, opts: TransferBufferOpts) !void {
+    const transfer_command_buffer = try allocAndBeginCommandBuffer(opts.device, opts.command_pool);
     var buffer_copy_region = c.VkBufferCopy{
         .srcOffset = 0,
         .dstOffset = 0,
         .size = buffer_size,
     };
     c.vkCmdCopyBuffer(transfer_command_buffer, src_buffer, dst_buffer, 1, &buffer_copy_region);
-    try vke.checkResult(c.vkEndCommandBuffer(transfer_command_buffer));
+    try endAndFreeCommandBuffer(opts.device, opts.command_pool, transfer_command_buffer, opts.transfer_queue);
+}
 
-    const submit_info = std.mem.zeroInit(c.VkSubmitInfo, .{
-        .sType = c.VK_STRUCTURE_TYPE_SUBMIT_INFO,
-        .commandBufferCount = 1,
-        .pCommandBuffers = &transfer_command_buffer,
+pub fn copyImageBuffer(src_buffer: c.VkBuffer, dst_image: c.VkImage, width: u32, height: u32, opts: TransferBufferOpts) !void {
+    const transfer_command_buffer = try allocAndBeginCommandBuffer(opts.device, opts.command_pool);
+
+    const image_region = std.mem.zeroInit(c.VkBufferImageCopy, .{
+        .bufferOffset = 0,
+        .bufferRowLength = 0,
+        .bufferImageHeight = 0,
+        .imageSubresource = c.VkImageSubresourceLayers{
+            .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
+            .mipLevel = 0,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        },
+        .imageOffset = .{ .x = 0, .y = 0, .z = 0 },
+        .imageExtent = .{ .width = width, .height = height, .depth = 1 },
     });
 
-    try vke.checkResult(c.vkQueueSubmit(opts.transfer_queue, 1, &submit_info, null));
-    try vke.checkResult(c.vkQueueWaitIdle(opts.transfer_queue));
+    c.vkCmdCopyBufferToImage(transfer_command_buffer, src_buffer, dst_image, c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &image_region);
+    try endAndFreeCommandBuffer(opts.device, opts.command_pool, transfer_command_buffer, opts.transfer_queue);
 }
 
 pub fn createVertexBuffer(vertices: []scene.Vertex, opts: VertexBufferOpts) !MeshBuffer {

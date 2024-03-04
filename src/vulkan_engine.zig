@@ -10,6 +10,7 @@ const vkp = @import("./vulkan/pipeline.zig");
 const vkr = @import("./vulkan/render_pass.zig");
 const vkb = @import("./vulkan/buffer.zig");
 const vkds = @import("./vulkan/descriptor_set.zig");
+const vkt = @import("./vulkan/texture.zig");
 const scene = @import("scene");
 const zmath = @import("zmath");
 
@@ -63,10 +64,16 @@ const VulkanEngine = struct {
     mesh_buffers: []vkb.MeshBuffer,
     meshes: []scene.Mesh,
 
+    texture_image: c.VkImage,
+    texture_image_memory: c.VkDeviceMemory,
+
     camera: scene.Camera,
 
     pub fn cleanup(self: *VulkanEngine) void {
         _ = c.vkDeviceWaitIdle(self.device);
+
+        c.vkDestroyImage(self.device, self.texture_image, null);
+        c.vkFreeMemory(self.device, self.texture_image_memory, null);
 
         self.allocator.free(self.meshes);
         // self.allocator.free(self.model_transfer_space);
@@ -157,7 +164,7 @@ const VulkanEngine = struct {
             var m1 = zmath.identity();
             var m2 = zmath.identity();
 
-            m1 = zmath.mul(zmath.translationV(.{0, 0, -3.5, 1}), m1);
+            m1 = zmath.mul(zmath.translationV(.{0, 0, -2.5, 1}), m1);
             m1 = zmath.mul(zmath.rotationZ(std.math.degreesToRadians(f32, angle)), m1);
 
             m2 = zmath.mul(zmath.translationV(.{0, 0, -3, 1}), m2);
@@ -369,6 +376,13 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
     };
     camera.projection[1][1] *= -1;
 
+    const sample_image = try vkt.loadImageFromFile("assets/sample_floor.png", .{
+        .physical_device = physical_device.handle,
+        .device = device.handle,
+        .transfer_queue = device.graphics_queue,
+        .command_pool = graphics_command_pool.handle,
+    });
+
     // const model_transfer_space = try vkds.allocate_model_transfer_space(alloc, physical_device.min_uniform_buffer_offset_alignment, max_objects);
 
     const vertices = [_]scene.Vertex{
@@ -508,6 +522,8 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
         .mesh_buffers = mesh_buffers,
         .meshes = meshes,
         .camera = camera,
+        .texture_image = sample_image.handle,
+        .texture_image_memory = sample_image.memory,
     };
 
     return engine;
