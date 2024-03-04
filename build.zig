@@ -38,6 +38,10 @@ pub fn build(b: *std.Build) !void {
     exe.linkLibCpp();
     unit_tests.linkLibCpp();
 
+    // TODO: Clean this up and move header into libs with simple import of build.zig from libs/stb
+    exe.addIncludePath(.{ .path = "thirdparty/stb" });
+    exe.addCSourceFile(.{ .file = .{ .path = "libs/stb/stb_impl.c" }, .flags = &.{}});
+
     const root_target = target.result;
 
     switch (root_target.os.tag) {
