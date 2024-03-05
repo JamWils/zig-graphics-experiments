@@ -64,7 +64,7 @@ pub fn createGraphicsPipeline(a: std.mem.Allocator, opts: GraphicsPipelineOpts) 
             .binding = 0,
             .location = 2,
             .format = c.VK_FORMAT_R32G32_SFLOAT,
-            .offset = @offsetOf(scene.Vertex, "tex"),
+            .offset = @offsetOf(scene.Vertex, "uv"),
         }
     };
 

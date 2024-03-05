@@ -409,22 +409,22 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
         .{
             .position = .{-0.4, 0.4, 0.0},
             .color = .{1, 0, 0},
-            .tex = .{1, 1},
+            .uv = .{1, 1},
         },
         .{
             .position = .{-0.4, -0.4, 0.0},
             .color = .{0, 1, 0},
-            .tex = .{1, 0},
+            .uv = .{1, 0},
         },
         .{
             .position = .{0.4, -0.4, 0.0},
             .color = .{0, 0, 1},
-            .tex = .{0, 0},
+            .uv = .{0, 0},
         },
         .{
             .position = .{0.4, 0.4, 0.0},
             .color = .{1, 1, 0},
-            .tex = .{0, 1},
+            .uv = .{0, 1},
         },
     };
 
@@ -432,22 +432,22 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
         .{
             .position = .{-0.25, 0.6, 0.0},
             .color = .{1, 0, 0},
-            .tex = .{1, 1},
+            .uv = .{1, 1},
         },
         .{
             .position = .{-0.25, -0.6, 0.0},
             .color = .{1, 1, 0},
-            .tex = .{1, 0},
+            .uv = .{1, 0},
         },
         .{
             .position = .{0.25, -0.6, 0.0},
             .color = .{1, 0, 1},
-            .tex = .{0, 0},
+            .uv = .{0, 0},
         },
         .{
             .position = .{0.25, 0.6, 0.0},
             .color = .{1, 1, 0},
-            .tex = .{0, 1},
+            .uv = .{0, 1},
         },
     };
 

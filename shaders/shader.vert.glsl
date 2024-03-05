@@ -2,7 +2,7 @@
 
 layout(location = 0) in vec3 pos;
 layout(location = 1) in vec3 col;
-layout(location = 2) in vec2 tex;
+layout(location = 2) in vec2 uv;
 
 layout(set = 0, binding = 0) uniform Camera {
     mat4 view;
@@ -24,5 +24,5 @@ void main() {
     gl_Position = camera.projection * camera.view * ubo.model * vec4(pos, 1.0);
     // gl_Position = vec4(pos, 1.0);
     fragCol = col;
-    fragUV = tex;
+    fragUV = uv;
 }
