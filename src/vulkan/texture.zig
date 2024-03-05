@@ -2,6 +2,7 @@ const std = @import("std");
 const vkb = @import("./buffer.zig");
 const vke = @import("./error.zig");
 const vks = @import("./swapchain.zig");
+const vkds = @import("./descriptor_set.zig");
 const c = @import("../clibs.zig");
 
 // pub const AllocatedImage = struct {
@@ -14,6 +15,11 @@ pub const ImageOpts = struct {
     device: c.VkDevice,
     transfer_queue: c.VkQueue,
     command_pool: c.VkCommandPool,
+};
+
+pub const SamplerImageView = struct {
+    image_view: c.VkImageView,
+    descriptor_sets: []c.VkDescriptorSet,
 };
 
 pub fn loadImageFromFile(filepath: []const u8, opts: ImageOpts) !vks.Image {
@@ -62,4 +68,38 @@ pub fn loadImageFromFile(filepath: []const u8, opts: ImageOpts) !vks.Image {
     });
 
     return image;
+}
+
+pub fn createTextureSampler(device: c.VkDevice) !c.VkSampler {
+    const sampler_info = c.VkSamplerCreateInfo{
+        .sType = c.VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+        .magFilter = c.VK_FILTER_LINEAR,
+        .minFilter = c.VK_FILTER_LINEAR,
+        .addressModeU = c.VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        .addressModeV = c.VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        .addressModeW = c.VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        .anisotropyEnable = c.VK_TRUE,
+        .maxAnisotropy = 16,
+        .borderColor = c.VK_BORDER_COLOR_INT_OPAQUE_BLACK,
+        .unnormalizedCoordinates = c.VK_FALSE,
+        .compareEnable = c.VK_FALSE,
+        .compareOp = c.VK_COMPARE_OP_ALWAYS,
+        .mipmapMode = c.VK_SAMPLER_MIPMAP_MODE_LINEAR,
+        .mipLodBias = 0.0,
+        .minLod = 0.0,
+        .maxLod = 0.0,
+    };
+
+    var sampler: c.VkSampler = undefined;
+    try vke.checkResult(c.vkCreateSampler(device, &sampler_info, null, &sampler));
+    return sampler;
+}
+
+pub fn createTextureImageView(a: std.mem.Allocator, device: c.VkDevice, image: c.VkImage, descriptor_pool: c.VkDescriptorPool, descriptor_set_layout: c.VkDescriptorSetLayout, texture_sampler: c.VkSampler) !SamplerImageView {
+    const image_view = try vks.createImageView(device, image, c.VK_FORMAT_R8G8B8A8_UNORM, c.VK_IMAGE_ASPECT_COLOR_BIT);
+    const descriptor_sets = try vkds.createTextureDescriptorSets(a, device, descriptor_pool, descriptor_set_layout, image_view, texture_sampler);
+    return .{
+        .image_view = image_view,
+        .descriptor_sets = descriptor_sets,
+    };
 }

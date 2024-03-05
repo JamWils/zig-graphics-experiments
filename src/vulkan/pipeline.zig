@@ -8,6 +8,7 @@ const GraphicsPipelineOpts = struct {
     device: c.VkDevice,
     render_pass: c.VkRenderPass,
     descriptor_set_layout: c.VkDescriptorSetLayout,
+    sampler_descriptor_set_layout: c.VkDescriptorSetLayout,
     swapchain_extent: c.VkExtent2D,
     push_constant_range: c.VkPushConstantRange,
 };
@@ -138,12 +139,12 @@ pub fn createGraphicsPipeline(a: std.mem.Allocator, opts: GraphicsPipelineOpts) 
         .pAttachments = &color_blend_attachment,
     });
 
-    const descriptor_set_layouts = [_]c.VkDescriptorSetLayout{opts.descriptor_set_layout};
+    const descriptor_set_layouts = [_]c.VkDescriptorSetLayout{opts.descriptor_set_layout, opts.sampler_descriptor_set_layout};
 
     const pipeline_layout_create_info = std.mem.zeroInit(c.VkPipelineLayoutCreateInfo, .{
         .sType = c.VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .setLayoutCount = 1,
-        .pSetLayouts = &descriptor_set_layouts[0],
+        .setLayoutCount = @as(u32, @intCast(descriptor_set_layouts.len)),
+        .pSetLayouts = &descriptor_set_layouts,
         .pushConstantRangeCount = 1,
         .pPushConstantRanges = &opts.push_constant_range,
     });

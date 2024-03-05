@@ -59,6 +59,10 @@ pub fn createLogicalDevice(alloc: std.mem.Allocator, physical_device: PhysicalDe
             .pQueuePriorities = &priority,
         }));
     }
+
+    const device_features = std.mem.zeroInit(c.VkPhysicalDeviceFeatures, .{
+        .samplerAnisotropy = c.VK_TRUE,
+    });
     
     const device_create_info = std.mem.zeroInit(c.VkDeviceCreateInfo, .{
         .sType = c.VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
@@ -67,6 +71,7 @@ pub fn createLogicalDevice(alloc: std.mem.Allocator, physical_device: PhysicalDe
         .enabledExtensionCount = @as(u32, @intCast(required_extensions.len)),
         .ppEnabledExtensionNames = required_extensions.ptr,
         .enabledLayerCount = 0,
+        .pEnabledFeatures = &device_features,
     });
 
     var device: c.VkDevice = undefined;
@@ -143,6 +148,10 @@ pub fn getPhysicalDevice(alloc: std.mem.Allocator, instance: c.VkInstance, surfa
 
     if (features_1_3.synchronization2 == c.VK_FALSE) {
         return error.MissingFeatureSynchronization2;
+    }
+
+    if (physical_features.features.samplerAnisotropy == c.VK_FALSE) {
+        return error.MissingFeatureSamplerAnisotropy;
     }
 
     var device_properties: c.VkPhysicalDeviceProperties = undefined;

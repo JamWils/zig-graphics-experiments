@@ -28,7 +28,6 @@ pub const BufferSet = struct {
     }
 };
 
-
 pub const DescriptorPool = struct {
     handle: c.VkDescriptorPool,
 };
@@ -53,6 +52,28 @@ pub fn createDescriptorSetLayout(device: c.VkDevice) !DescriptorSetLayout {
 
     // const bindings = [_]c.VkDescriptorSetLayoutBinding{ camera_binding_info, model_binding_info};
     const bindings = [_]c.VkDescriptorSetLayoutBinding{ camera_binding_info };
+
+    var layout_info = std.mem.zeroInit(c.VkDescriptorSetLayoutCreateInfo, .{
+        .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .bindingCount = @as(u32, bindings.len),
+        .pBindings = &bindings,
+    });
+
+    var layout: c.VkDescriptorSetLayout = undefined;
+    try vke.checkResult(c.vkCreateDescriptorSetLayout(device, &layout_info, null, &layout));
+    return DescriptorSetLayout{ .handle = layout };
+}
+
+pub fn createSamplerDescriptorSetLayout(device: c.VkDevice) !DescriptorSetLayout {
+    const sampler_binding_info = std.mem.zeroInit(c.VkDescriptorSetLayoutBinding, .{
+        .binding = 0,
+        .descriptorType = c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        .descriptorCount = 1,
+        .stageFlags = c.VK_SHADER_STAGE_FRAGMENT_BIT,
+        .pImmutableSamplers = null,
+    });
+
+    const bindings: [1]c.VkDescriptorSetLayoutBinding = .{ sampler_binding_info };
 
     var layout_info = std.mem.zeroInit(c.VkDescriptorSetLayoutCreateInfo, .{
         .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
@@ -139,6 +160,25 @@ pub fn createDescriptorPool(device: c.VkDevice, buffer_count: u32) !DescriptorPo
     return .{ .handle = pool };
 }
 
+pub fn createSamplerDescriptorPool(device: c.VkDevice, max_objects: u32) !DescriptorPool {
+    // TODO: This assumes one texture to one object. This will need to be updated to support multiple textures per object.
+    const sampler_pool_sizes = std.mem.zeroInit(c.VkDescriptorPoolSize, .{
+        .type = c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        .descriptorCount = max_objects,
+    });
+
+    const pool_info = std.mem.zeroInit(c.VkDescriptorPoolCreateInfo, .{
+        .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .poolSizeCount = 1,
+        .pPoolSizes = &sampler_pool_sizes,
+        .maxSets = max_objects,
+    });
+
+    var pool: c.VkDescriptorPool = undefined;
+    try vke.checkResult(c.vkCreateDescriptorPool(device, &pool_info, null, &pool));
+    return .{ .handle = pool };
+}
+
 pub fn createDescriptorSets(a: std.mem.Allocator, buffer_count: u32, device: c.VkDevice, descriptor_pool: c.VkDescriptorPool, descriptor_set_layout: c.VkDescriptorSetLayout, buffer_set: []BufferSet, _: u64) ![]c.VkDescriptorSet {
     var layouts = [_]c.VkDescriptorSetLayout{ descriptor_set_layout, descriptor_set_layout };
 
@@ -187,6 +227,43 @@ pub fn createDescriptorSets(a: std.mem.Allocator, buffer_count: u32, device: c.V
 
         // const descriptor_writes = [_]c.VkWriteDescriptorSet{ camera_set_writes, model_set_writes };
         const descriptor_writes = [_]c.VkWriteDescriptorSet{ camera_set_writes };
+        c.vkUpdateDescriptorSets(device, @as(u32, descriptor_writes.len), &descriptor_writes, 0, null);
+    }
+
+    return sets;
+}
+
+pub fn createTextureDescriptorSets(a: std.mem.Allocator, device: c.VkDevice, descriptor_pool: c.VkDescriptorPool, descriptor_set_layout: c.VkDescriptorSetLayout, texture_image_view: c.VkImageView, texture_sampler: c.VkSampler) ![]c.VkDescriptorSet {
+    var layouts = [_]c.VkDescriptorSetLayout{ descriptor_set_layout };
+
+    var alloc_info = std.mem.zeroInit(c.VkDescriptorSetAllocateInfo, .{
+        .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = descriptor_pool,
+        .descriptorSetCount = 1,
+        .pSetLayouts = &layouts,
+    });
+    
+    const sets = try a.alloc(c.VkDescriptorSet, 1);
+    try vke.checkResult(c.vkAllocateDescriptorSets(device, &alloc_info, sets.ptr));
+
+    for (sets) |set| {
+        const image_info = std.mem.zeroInit(c.VkDescriptorImageInfo, .{
+            .imageLayout = c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            .imageView = texture_image_view,
+            .sampler = texture_sampler,
+        });
+
+        const image_set_write = std.mem.zeroInit(c.VkWriteDescriptorSet, .{
+            .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet = set,
+            .dstBinding = 0,
+            .dstArrayElement = 0,
+            .descriptorType = c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            .descriptorCount = 1,
+            .pImageInfo = &image_info,
+        });
+
+        const descriptor_writes = [_]c.VkWriteDescriptorSet{ image_set_write };
         c.vkUpdateDescriptorSets(device, @as(u32, descriptor_writes.len), &descriptor_writes, 0, null);
     }
 

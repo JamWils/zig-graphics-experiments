@@ -12,6 +12,7 @@ pub const UBO = struct {
 pub const Mesh = struct {
     vertices: []Vertex,
     indices: []u32,
+    texture_id: u32,
     model: UBO = .{.model = zmath.identity()},
 };
 

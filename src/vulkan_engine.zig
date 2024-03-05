@@ -45,6 +45,11 @@ const VulkanEngine = struct {
     descriptor_set_layout: c.VkDescriptorSetLayout,
     descriptor_pool: c.VkDescriptorPool,
     descriptor_sets: []c.VkDescriptorSet,
+
+    sampler_descriptor_set_layout: c.VkDescriptorSetLayout,
+    sampler_descriptor_pool: c.VkDescriptorPool,
+    sampler_descriptor_sets: []c.VkDescriptorSet,
+
     uniform_buffers: []vkds.BufferSet,
     // model_uniform_alignment: usize,
     // model_transfer_space: []scene.UBO,
@@ -66,12 +71,18 @@ const VulkanEngine = struct {
 
     texture_image: c.VkImage,
     texture_image_memory: c.VkDeviceMemory,
+    texture_image_view: c.VkImageView,
+    texture_sampler: c.VkSampler,
 
     camera: scene.Camera,
 
     pub fn cleanup(self: *VulkanEngine) void {
         _ = c.vkDeviceWaitIdle(self.device);
 
+        
+        self.allocator.free(self.sampler_descriptor_sets);
+        c.vkDestroySampler(self.device, self.texture_sampler, null);
+        c.vkDestroyImageView(self.device, self.texture_image_view, null);
         c.vkDestroyImage(self.device, self.texture_image, null);
         c.vkFreeMemory(self.device, self.texture_image_memory, null);
 
@@ -114,10 +125,12 @@ const VulkanEngine = struct {
         self.allocator.free(self.uniform_buffers);
 
         c.vkDestroyDescriptorPool(self.device, self.descriptor_pool, null);
+        c.vkDestroyDescriptorPool(self.device, self.sampler_descriptor_pool, null);
         self.allocator.free(self.descriptor_sets);
 
         c.vkDestroyPipelineLayout(self.device, self.pipeline_layout, null);
         c.vkDestroyDescriptorSetLayout(self.device, self.descriptor_set_layout, null);
+        c.vkDestroyDescriptorSetLayout(self.device, self.sampler_descriptor_set_layout, null);
         c.vkDestroyRenderPass(self.device, self.render_pass, null);
 
         for (self.swapchain_image_views) |image_view| {
@@ -337,6 +350,7 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
 
     const render_pass = try vkr.createRenderPass(physical_device.handle, device.handle, swapchain.surface_format.format);
     const descriptor_set_layout = try vkds.createDescriptorSetLayout(device.handle);
+    const sampler_descriptor_set_layout = try vkds.createSamplerDescriptorSetLayout(device.handle);
     const buffer_count: u32 = @as(u32, @intCast(swapchain.images.len));
     const uniform_buffers = try vkds.createUniformBuffers(alloc, .{
         .physical_device = physical_device.handle,
@@ -346,6 +360,7 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
         .max_objects = max_objects,
     });
     const descriptor_pool = try vkds.createDescriptorPool(device.handle, buffer_count);
+    const sampler_descriptor_pool = try vkds.createSamplerDescriptorPool(device.handle, max_objects);
     const descriptor_sets = try vkds.createDescriptorSets(alloc, buffer_count, device.handle, descriptor_pool.handle, descriptor_set_layout.handle, uniform_buffers, model_uniform_alignment);
 
     const push_constant_range = c.VkPushConstantRange{
@@ -358,6 +373,7 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
         .swapchain_extent = swapchain.image_extent,
         .render_pass = render_pass.handle,
         .descriptor_set_layout = descriptor_set_layout.handle,
+        .sampler_descriptor_set_layout = sampler_descriptor_set_layout.handle,
         .push_constant_range = push_constant_range,
     });
     const depth_image = try vks.createDepthBufferImage(physical_device.handle, device.handle, swapchain.image_extent);
@@ -382,6 +398,8 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
         .transfer_queue = device.graphics_queue,
         .command_pool = graphics_command_pool.handle,
     });
+    const texture_sampler = try vkt.createTextureSampler(device.handle);
+    const sampler_image_view = try vkt.createTextureImageView(alloc, device.handle, sample_image.handle, sampler_descriptor_pool.handle, sampler_descriptor_set_layout.handle, texture_sampler);
 
     // const model_transfer_space = try vkds.allocate_model_transfer_space(alloc, physical_device.min_uniform_buffer_offset_alignment, max_objects);
 
@@ -431,6 +449,7 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
     const first_mesh = scene.Mesh{
         .vertices = alloc.dupe(scene.Vertex, vertices[0..]) catch @panic("Out of memory"),
         .indices = alloc.dupe(u32, indices[0..]) catch @panic("Out of memory"),
+        .texture_id = 0,
         .model = scene.UBO{
             .model = zmath.identity(),
         },
@@ -441,6 +460,7 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
     const second_mesh = scene.Mesh{
         .vertices = alloc.dupe(scene.Vertex, vertices_two[0..]) catch @panic("Out of memory"),
         .indices = alloc.dupe(u32, indices[0..]) catch @panic("Out of memory"),
+        .texture_id = 0,
         .model = scene.UBO{
             .model = zmath.identity(),
         },
@@ -510,8 +530,11 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
         .render_pass = render_pass.handle,
         .pipeline_layout = pipeline.layout,
         .descriptor_set_layout = descriptor_set_layout.handle,
+        .sampler_descriptor_set_layout = sampler_descriptor_set_layout.handle,
         .descriptor_pool = descriptor_pool.handle,
+        .sampler_descriptor_pool = sampler_descriptor_pool.handle,
         .descriptor_sets = descriptor_sets,
+        .sampler_descriptor_sets = sampler_image_view.descriptor_sets,
         .uniform_buffers = uniform_buffers,
         // .model_uniform_alignment = model_uniform_alignment,
         // .model_transfer_space = model_transfer_space,
@@ -523,7 +546,9 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
         .meshes = meshes,
         .camera = camera,
         .texture_image = sample_image.handle,
+        .texture_image_view = sampler_image_view.image_view,
         .texture_image_memory = sample_image.memory,
+        .texture_sampler = texture_sampler,
     };
 
     return engine;

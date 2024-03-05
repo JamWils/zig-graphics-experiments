@@ -189,7 +189,7 @@ pub fn createFramebuffer(a: std.mem.Allocator, device: c.VkDevice, swapchain: Sw
     };
 }
 
-fn createImageView(device: c.VkDevice, image: c.VkImage, format: c.VkFormat, aspectFlags: c.VkImageAspectFlags) !c.VkImageView {
+pub fn createImageView(device: c.VkDevice, image: c.VkImage, format: c.VkFormat, aspectFlags: c.VkImageAspectFlags) !c.VkImageView {
     const image_view_info = std.mem.zeroInit(c.VkImageViewCreateInfo, .{
         .sType = c.VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
         .image = image,
