@@ -3,6 +3,7 @@ const zmath = @import("zmath");
 pub const Vertex = struct {
     position: @Vector(3, f32),
     color: @Vector(3, f32),
+    tex: @Vector(2, f32),
 };
 
 pub const UBO = struct {

@@ -67,6 +67,8 @@ pub fn loadImageFromFile(filepath: []const u8, opts: ImageOpts) !vks.Image {
         .command_pool = opts.command_pool,
     });
 
+    try vks.transitionImageLayout(opts.device, opts.command_pool, opts.transfer_queue, image.handle, c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
     return image;
 }
 

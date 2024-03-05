@@ -301,9 +301,11 @@ const VulkanEngine = struct {
                 c.vkCmdBindIndexBuffer(command_buffer, mesh_buffer.index_buffer, 0, c.VK_INDEX_TYPE_UINT32);
                 c.vkCmdPushConstants(command_buffer, self.pipeline_layout, c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(scene.UBO), &self.meshes[j].model);
 
+                const descriptor_sets = [_]c.VkDescriptorSet{ self.descriptor_sets[current_index], self.sampler_descriptor_sets[self.meshes[j].texture_id] };
+
                 // const dynamic_offset = @as(u32, @intCast(self.model_uniform_alignment * j));
                 // c.vkCmdBindDescriptorSets(command_buffer, c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipeline_layout, 0, 1, &self.descriptor_sets[current_index], 1, &dynamic_offset);
-                c.vkCmdBindDescriptorSets(command_buffer, c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipeline_layout, 0, 1, &self.descriptor_sets[current_index], 0, null);
+                c.vkCmdBindDescriptorSets(command_buffer, c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipeline_layout, 0, @as(u32, @intCast(descriptor_sets.len)), &descriptor_sets, 0, null);
                 c.vkCmdDrawIndexed(command_buffer, mesh_buffer.index_count, 1, 0, 0, 0);
             }
 
@@ -407,18 +409,22 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
         .{
             .position = .{-0.4, 0.4, 0.0},
             .color = .{1, 0, 0},
+            .tex = .{1, 1},
         },
         .{
             .position = .{-0.4, -0.4, 0.0},
             .color = .{0, 1, 0},
+            .tex = .{1, 0},
         },
         .{
             .position = .{0.4, -0.4, 0.0},
             .color = .{0, 0, 1},
+            .tex = .{0, 0},
         },
         .{
             .position = .{0.4, 0.4, 0.0},
             .color = .{1, 1, 0},
+            .tex = .{0, 1},
         },
     };
 
@@ -426,18 +432,22 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
         .{
             .position = .{-0.25, 0.6, 0.0},
             .color = .{1, 0, 0},
+            .tex = .{1, 1},
         },
         .{
             .position = .{-0.25, -0.6, 0.0},
             .color = .{1, 1, 0},
+            .tex = .{1, 0},
         },
         .{
             .position = .{0.25, -0.6, 0.0},
             .color = .{1, 0, 1},
+            .tex = .{0, 0},
         },
         .{
             .position = .{0.25, 0.6, 0.0},
             .color = .{1, 1, 0},
+            .tex = .{0, 1},
         },
     };
 
