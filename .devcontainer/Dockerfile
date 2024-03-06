@@ -24,10 +24,21 @@ RUN cd /tmp && \
     rm vulkansdk-linux-x86_64-${VULKAN_SDK_VERSION}.tar.xz && \
     mv ${VULKAN_SDK_VERSION} /opt/vulkansdk-${VULKAN_SDK_VERSION}
 
+
 ENV VULKAN_SDK="/opt/vulkansdk-${VULKAN_SDK_VERSION}/x86_64"
 ENV PATH="${VULKAN_SDK}/bin:$PATH"
 ENV LD_LIBRARY_PATH="${VULKAN_SDK}/lib:$LD_LIBRARY_PATH"
 ENV VK_LAYER_PATH="${VULKAN_SDK}/etc/vulkan/explicit_layer.d"
+
+# Install Flecs
+# https://github.com/SanderMertens/flecs/archive/refs/tags/v3.2.11.tar.gz
+ENV FLECS_VERSION=3.2.11
+RUN cd /tmp && \
+    curl -L -O https://github.com/SanderMertens/flecs/archive/refs/tags/v${FLECS_VERSION}.tar.gz && \
+    ls -l && \
+    tar -xvzf v${FLECS_VERSION}.tar.gz && \
+    rm v${FLECS_VERSION}.tar.gz && \
+    mv flecs-${FLECS_VERSION} /opt/flecs-${FLECS_VERSION}
 
 # Install Zig
 RUN ZIG_VERSION=0.12.0-dev.2805+79e99c401 && \
