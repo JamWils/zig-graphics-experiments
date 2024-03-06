@@ -38,6 +38,8 @@ pub fn build(b: *std.Build) !void {
     exe.linkLibCpp();
     unit_tests.linkLibCpp();
 
+    @import("stb").addPathsToModule(&exe.root_module);
+
     const root_target = target.result;
 
     switch (root_target.os.tag) {
@@ -124,12 +126,7 @@ pub fn build(b: *std.Build) !void {
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
 
-    
-
-    
-
     const run_unit_tests = b.addRunArtifact(unit_tests);
-
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_unit_tests.step);
 }

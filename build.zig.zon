@@ -13,5 +13,6 @@
         .zmath = .{ .path = "libs/zmath" },
         .objc = .{ .path = "libs/objc" },
         .scene = .{ .path = "libs/scene" },
+        .stb = .{ .path = "libs/stb" },
     } 
 }

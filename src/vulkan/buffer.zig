@@ -11,7 +11,7 @@ const BufferOpts = struct {
     buffer_properties: c.VkMemoryPropertyFlags,
 };
 
-const TransferBufferOpts = struct {
+pub const TransferBufferOpts = struct {
     device: c.VkDevice,
     transfer_queue: c.VkQueue,
     command_pool: c.VkCommandPool,
@@ -25,12 +25,12 @@ pub const VertexBufferOpts = struct {
 };
 
 pub const Buffer = struct {
-    handle: [*c]c.VkBuffer = undefined,
-    memory: [*c]c.VkDeviceMemory = undefined,
+    handle: c.VkBuffer = undefined,
+    memory: c.VkDeviceMemory = undefined,
 
     pub fn deleteAndFree(self: Buffer, device: c.VkDevice) void {
-        c.vkDestroyBuffer(device, self.handle.*, null);
-        c.vkFreeMemory(device, self.memory.*, null);
+        c.vkDestroyBuffer(device, self.handle, null);
+        c.vkFreeMemory(device, self.memory, null);
     }
 };
 
@@ -51,7 +51,7 @@ pub const MeshBuffer = struct {
     }
 };
 
-pub fn createBuffer(buffer: *const Buffer, opts: BufferOpts) !void {
+pub fn createBuffer(opts: BufferOpts) !Buffer {
     const buffer_create_info = std.mem.zeroInit(c.VkBufferCreateInfo, .{
         .sType = c.VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .size = opts.buffer_size,
@@ -59,10 +59,11 @@ pub fn createBuffer(buffer: *const Buffer, opts: BufferOpts) !void {
         .sharingMode = c.VK_SHARING_MODE_EXCLUSIVE,
     });
 
-    try vke.checkResult(c.vkCreateBuffer(opts.device, &buffer_create_info, null, buffer.handle));
+    var handle: c.VkBuffer = undefined;
+    try vke.checkResult(c.vkCreateBuffer(opts.device, &buffer_create_info, null, &handle));
 
     var memory_req: c.VkMemoryRequirements = undefined;
-    c.vkGetBufferMemoryRequirements(opts.device, buffer.handle.*, &memory_req);
+    c.vkGetBufferMemoryRequirements(opts.device, handle, &memory_req);
 
     var memory_alloc_info = std.mem.zeroInit(c.VkMemoryAllocateInfo, .{
         .sType = c.VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
@@ -74,79 +75,102 @@ pub fn createBuffer(buffer: *const Buffer, opts: BufferOpts) !void {
         ),
     });
 
-    try vke.checkResult(c.vkAllocateMemory(opts.device, &memory_alloc_info, null, buffer.memory));
-    try vke.checkResult(c.vkBindBufferMemory(opts.device, buffer.handle.*, buffer.memory.*, 0));
+    var memory: c.VkDeviceMemory = undefined;
+    try vke.checkResult(c.vkAllocateMemory(opts.device, &memory_alloc_info, null, &memory));
+    try vke.checkResult(c.vkBindBufferMemory(opts.device, handle, memory, 0));
+
+    return .{
+        .handle = handle,
+        .memory = memory,
+    };
 }
 
-fn copyBuffer(src_buffer: c.VkBuffer, dst_buffer: c.VkBuffer, buffer_size: c.VkDeviceSize, opts: TransferBufferOpts) !void {
+pub fn allocAndBeginCommandBuffer(device: c.VkDevice, command_pool: c.VkCommandPool) !c.VkCommandBuffer {
     const alloc_info = std.mem.zeroInit(c.VkCommandBufferAllocateInfo, .{
         .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
         .level = c.VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandPool = opts.command_pool,
+        .commandPool = command_pool,
         .commandBufferCount = 1,
     });
 
-    var transfer_command_buffer: c.VkCommandBuffer = undefined;
-    defer c.vkFreeCommandBuffers(opts.device, opts.command_pool, 1, &transfer_command_buffer);
-    try vke.checkResult(c.vkAllocateCommandBuffers(opts.device, &alloc_info, &transfer_command_buffer));
+    var command_buffer: c.VkCommandBuffer = undefined;
+    try vke.checkResult(c.vkAllocateCommandBuffers(device, &alloc_info, &command_buffer));
 
     const begin_info = std.mem.zeroInit(c.VkCommandBufferBeginInfo, .{
         .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
         .flags = c.VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
     });
 
-    try vke.checkResult(c.vkBeginCommandBuffer(transfer_command_buffer, &begin_info));
+    try vke.checkResult(c.vkBeginCommandBuffer(command_buffer, &begin_info));
+    return command_buffer;
+}
 
+/// End the command buffer and submit it to the queue.
+pub fn endAndFreeCommandBuffer(device: c.VkDevice, command_pool: c.VkCommandPool, command_buffer: c.VkCommandBuffer, queue: c.VkQueue) !void {
+    try vke.checkResult(c.vkEndCommandBuffer(command_buffer));
+
+    const submit_info = std.mem.zeroInit(c.VkSubmitInfo, .{
+        .sType = c.VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &command_buffer,
+    });
+
+    try vke.checkResult(c.vkQueueSubmit(queue, 1, &submit_info, null));
+    try vke.checkResult(c.vkQueueWaitIdle(queue));
+
+    c.vkFreeCommandBuffers(device, command_pool, 1, &command_buffer);
+}
+
+fn copyBuffer(src_buffer: c.VkBuffer, dst_buffer: c.VkBuffer, buffer_size: c.VkDeviceSize, opts: TransferBufferOpts) !void {
+    const transfer_command_buffer = try allocAndBeginCommandBuffer(opts.device, opts.command_pool);
     var buffer_copy_region = c.VkBufferCopy{
         .srcOffset = 0,
         .dstOffset = 0,
         .size = buffer_size,
     };
     c.vkCmdCopyBuffer(transfer_command_buffer, src_buffer, dst_buffer, 1, &buffer_copy_region);
-    try vke.checkResult(c.vkEndCommandBuffer(transfer_command_buffer));
+    try endAndFreeCommandBuffer(opts.device, opts.command_pool, transfer_command_buffer, opts.transfer_queue);
+}
 
-    const submit_info = std.mem.zeroInit(c.VkSubmitInfo, .{
-        .sType = c.VK_STRUCTURE_TYPE_SUBMIT_INFO,
-        .commandBufferCount = 1,
-        .pCommandBuffers = &transfer_command_buffer,
+pub fn copyImageBuffer(src_buffer: c.VkBuffer, dst_image: c.VkImage, width: u32, height: u32, opts: TransferBufferOpts) !void {
+    const transfer_command_buffer = try allocAndBeginCommandBuffer(opts.device, opts.command_pool);
+
+    const image_region = std.mem.zeroInit(c.VkBufferImageCopy, .{
+        .bufferOffset = 0,
+        .bufferRowLength = 0,
+        .bufferImageHeight = 0,
+        .imageSubresource = c.VkImageSubresourceLayers{
+            .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
+            .mipLevel = 0,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        },
+        .imageOffset = .{ .x = 0, .y = 0, .z = 0 },
+        .imageExtent = .{ .width = width, .height = height, .depth = 1 },
     });
 
-    try vke.checkResult(c.vkQueueSubmit(opts.transfer_queue, 1, &submit_info, null));
-    try vke.checkResult(c.vkQueueWaitIdle(opts.transfer_queue));
+    c.vkCmdCopyBufferToImage(transfer_command_buffer, src_buffer, dst_image, c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &image_region);
+    try endAndFreeCommandBuffer(opts.device, opts.command_pool, transfer_command_buffer, opts.transfer_queue);
 }
 
 pub fn createVertexBuffer(vertices: []scene.Vertex, opts: VertexBufferOpts) !MeshBuffer {
     const buffer_size = @sizeOf(scene.Vertex) * vertices.len;
 
-    var staging_buffer_handle: c.VkBuffer = undefined;
-    defer c.vkDestroyBuffer(opts.device, staging_buffer_handle, null);
-    var staging_buffer_memory: c.VkDeviceMemory = undefined;
-    defer c.vkFreeMemory(opts.device, staging_buffer_memory, null);
-
-    const staging_buffer: Buffer = .{
-        .handle = @as([*c]c.VkBuffer, @ptrCast(&staging_buffer_handle)),
-        .memory = @as([*c]c.VkDeviceMemory, @ptrCast(&staging_buffer_memory)),
-    };
-    try createBuffer(&staging_buffer, .{
+    var staging_buffer = try createBuffer(.{
         .physical_device = opts.physical_device,
         .device = opts.device,
         .buffer_properties = c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
         .buffer_size = buffer_size,
         .buffer_usage = c.VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
     });
+    defer staging_buffer.deleteAndFree(opts.device);
 
     var staging_data: ?*align(@alignOf(scene.Vertex)) anyopaque = undefined;
-    try vke.checkResult(c.vkMapMemory(opts.device, staging_buffer_memory, 0, buffer_size, 0, &staging_data));
+    try vke.checkResult(c.vkMapMemory(opts.device, staging_buffer.memory, 0, buffer_size, 0, &staging_data));
     @memcpy(@as([*]scene.Vertex, @ptrCast(staging_data)), vertices);
-    c.vkUnmapMemory(opts.device, staging_buffer_memory);
+    c.vkUnmapMemory(opts.device, staging_buffer.memory);
 
-    var vertex_buffer_handle: c.VkBuffer = undefined;
-    var vertex_buffer_memory: c.VkDeviceMemory = undefined;
-    const vertex_buffer: Buffer = .{
-        .handle = @as([*c]c.VkBuffer, @ptrCast(&vertex_buffer_handle)),
-        .memory = @as([*c]c.VkDeviceMemory, @ptrCast(&vertex_buffer_memory)),
-    };
-    try createBuffer(&vertex_buffer, .{
+    const vertex_buffer = try createBuffer(.{
         .physical_device = opts.physical_device,
         .device = opts.device,
         .buffer_properties = c.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
@@ -154,15 +178,15 @@ pub fn createVertexBuffer(vertices: []scene.Vertex, opts: VertexBufferOpts) !Mes
         .buffer_usage = c.VK_BUFFER_USAGE_TRANSFER_DST_BIT | c.VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
     });
 
-    try copyBuffer(staging_buffer_handle, vertex_buffer_handle, buffer_size, .{
+    try copyBuffer(staging_buffer.handle, vertex_buffer.handle, buffer_size, .{
         .device = opts.device,
         .transfer_queue = opts.transfer_queue,
         .command_pool = opts.transfer_command_pool,
     });
 
     return .{
-        .vertex_buffer = vertex_buffer_handle,
-        .vertex_memory = vertex_buffer_memory,
+        .vertex_buffer = vertex_buffer.handle,
+        .vertex_memory = vertex_buffer.memory,
         .vertex_count = @as(u32, @intCast(vertices.len)),
         .index_buffer = undefined,
         .index_memory = undefined,
@@ -173,38 +197,21 @@ pub fn createVertexBuffer(vertices: []scene.Vertex, opts: VertexBufferOpts) !Mes
 pub fn createIndexBuffer(indices: []u32, opts: VertexBufferOpts, mesh_buffer: *MeshBuffer) !void {
     const buffer_size = @sizeOf(u32) * indices.len;
 
-    var staging_buffer_handle: c.VkBuffer = undefined;
-    defer c.vkDestroyBuffer(opts.device, staging_buffer_handle, null);
-
-    var staging_buffer_memory: c.VkDeviceMemory = undefined;
-    defer c.vkFreeMemory(opts.device, staging_buffer_memory, null);
-
-    const staging_buffer: Buffer = .{
-        .handle = @as([*c]c.VkBuffer, @ptrCast(&staging_buffer_handle)),
-        .memory = @as([*c]c.VkDeviceMemory, @ptrCast(&staging_buffer_memory)),
-    };
-
-    try createBuffer(&staging_buffer, .{
+    const staging_buffer = try createBuffer(.{
         .physical_device = opts.physical_device,
         .device = opts.device,
         .buffer_properties = c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
         .buffer_size = buffer_size,
         .buffer_usage = c.VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
     });
+    defer staging_buffer.deleteAndFree(opts.device);
 
     var staging_data: ?*align(@alignOf(u32)) anyopaque = undefined;
-    try vke.checkResult(c.vkMapMemory(opts.device, staging_buffer_memory, 0, buffer_size, 0, &staging_data));
+    try vke.checkResult(c.vkMapMemory(opts.device, staging_buffer.memory, 0, buffer_size, 0, &staging_data));
     @memcpy(@as([*]u32, @ptrCast(staging_data)), indices);
-    c.vkUnmapMemory(opts.device, staging_buffer_memory);
+    c.vkUnmapMemory(opts.device, staging_buffer.memory);
 
-    var index_buffer_handle: c.VkBuffer = undefined;
-    var index_buffer_memory: c.VkDeviceMemory = undefined;
-    const index_buffer: Buffer = .{
-        .handle = @as([*c]c.VkBuffer, @ptrCast(&index_buffer_handle)),
-        .memory = @as([*c]c.VkDeviceMemory, @ptrCast(&index_buffer_memory)),
-    };
-
-    try createBuffer(&index_buffer, .{
+    const index_buffer = try createBuffer(.{
         .physical_device = opts.physical_device,
         .device = opts.device,
         .buffer_properties = c.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
@@ -212,18 +219,18 @@ pub fn createIndexBuffer(indices: []u32, opts: VertexBufferOpts, mesh_buffer: *M
         .buffer_usage = c.VK_BUFFER_USAGE_TRANSFER_DST_BIT | c.VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
     });
 
-    try copyBuffer(staging_buffer_handle, index_buffer_handle, buffer_size, .{
+    try copyBuffer(staging_buffer.handle, index_buffer.handle, buffer_size, .{
         .device = opts.device,
         .transfer_queue = opts.transfer_queue,
         .command_pool = opts.transfer_command_pool,
     });
 
-    mesh_buffer.index_buffer = index_buffer_handle;
-    mesh_buffer.index_memory = index_buffer_memory;
+    mesh_buffer.index_buffer = index_buffer.handle;
+    mesh_buffer.index_memory = index_buffer.memory;
     mesh_buffer.index_count = @as(u32, @intCast(indices.len));
 }
 
-fn findMemoryTypeIndex(physical_device: c.VkPhysicalDevice, allowed_types: u32, property_flags: c.VkMemoryPropertyFlags) u32 {
+pub fn findMemoryTypeIndex(physical_device: c.VkPhysicalDevice, allowed_types: u32, property_flags: c.VkMemoryPropertyFlags) u32 {
     var mem_props: c.VkPhysicalDeviceMemoryProperties = undefined;
     c.vkGetPhysicalDeviceMemoryProperties(physical_device, &mem_props);
 

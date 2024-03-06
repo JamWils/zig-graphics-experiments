@@ -20,6 +20,7 @@ const builtin = @import("builtin");
 
 pub usingnamespace @cImport({
     @cInclude("SDL2/SDL.h");
+    @cInclude("stb_image.h");
 
     if (builtin.os.tag == .windows) {
         @cInclude("SDL2/SDL_vulkan.h");
