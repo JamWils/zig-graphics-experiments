@@ -38,9 +38,7 @@ pub fn build(b: *std.Build) !void {
     exe.linkLibCpp();
     unit_tests.linkLibCpp();
 
-    // TODO: Clean this up and move header into libs with simple import of build.zig from libs/stb
-    exe.addIncludePath(.{ .path = "thirdparty/stb" });
-    exe.addCSourceFile(.{ .file = .{ .path = "libs/stb/stb_impl.c" }, .flags = &.{}});
+    @import("stb").addPathsToModule(&exe.root_module);
 
     const root_target = target.result;
 
@@ -128,12 +126,7 @@ pub fn build(b: *std.Build) !void {
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
 
-    
-
-    
-
     const run_unit_tests = b.addRunArtifact(unit_tests);
-
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_unit_tests.step);
 }
