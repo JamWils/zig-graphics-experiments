@@ -6,24 +6,26 @@ const std = @import("std");
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
-
-    // const lib = b.addStaticLibrary(.{
-    //     .name = "flecs",
-    //     .root_source_file = .{ .path = "src/root.zig" },
-    //     .target = target,
-    //     .optimize = optimize,
-    // });
-    // setupFlecs(lib);
-
     const mod = b.addModule("flecs", .{
         .root_source_file = .{ .path = "./src/root.zig" },
+        .target = target,
+        .optimize = optimize,
         .imports = &.{
         },
     });
-    setupFlecsMod(mod);
-
-    // lib.installHeader("./libs/flecs/flecs.h", "flecs.h");
-    // setupFlecs(lib);
+    mod.addIncludePath(.{ .cwd_relative = "libs/flecs" });
+    mod.addCSourceFile(.{
+        .file = .{ .path = "libs/flecs/flecs.c" },
+        .flags = &.{
+            "-fno-sanitize=undefined",
+            "-DFLECS_NO_CPP",
+            "-DFLECS_USE_OS_ALLOC",
+            if (@import("builtin").mode == .Debug) "-DFLECS_SANITIZE" else "",
+        },
+    });
+    if (target.result.os.tag == .windows) {
+        mod.linkSystemLibrary("ws2_32", .{});
+    }
 
     const lib_unit_tests = b.addTest(.{
         .root_source_file = .{ .path = "src/root.zig" },
@@ -51,21 +53,4 @@ pub fn setupFlecs(step: *std.Build.Step.Compile) void {
     if (step.rootModuleTarget().os.tag == .windows) {
         step.linkSystemLibrary("ws2_32");
     }
-}
-
-pub fn setupFlecsMod(step: *std.Build.Module) void {
-    // step.linkLibC();
-    step.addIncludePath(.{ .cwd_relative = "libs/flecs" });
-    step.addCSourceFile(.{
-        .file = .{ .path = "libs/flecs/flecs.c" },
-        .flags = &.{
-            "-fno-sanitize=undefined",
-            "-DFLECS_NO_CPP",
-            "-DFLECS_USE_OS_ALLOC",
-            if (@import("builtin").mode == .Debug) "-DFLECS_SANITIZE" else "",
-        },
-    });
-    // if (step.result.os.tag == .windows) {
-    //     step.linkSystemLibrary("ws2_32");
-    // }
 }

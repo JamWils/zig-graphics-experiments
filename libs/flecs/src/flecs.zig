@@ -2465,7 +2465,7 @@ pub fn override(world: *world_t, entity: entity_t, comptime T: type) void {
     ecs_override_id(world, entity, id(T));
 }
 
-pub fn field(it: *iter_t, comptime T: type, index: i32) ?[]T {
+pub fn  field(it: *iter_t, comptime T: type, index: i32) ?[]T {
     if (ecs_field_w_size(it, @sizeOf(T), index)) |anyptr| {
         const ptr = @as([*]T, @ptrCast(@alignCast(anyptr)));
         return ptr[0..it.count()];
