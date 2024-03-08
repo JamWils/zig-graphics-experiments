@@ -1,4 +1,5 @@
 const std = @import("std");
+const flecs = @import("flecs");
 
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
@@ -32,6 +33,12 @@ pub fn build(b: *std.Build) !void {
         exe.root_module.addImport(e.key_ptr.*, e.value_ptr.*);
         unit_tests.root_module.addImport(e.key_ptr.*, e.value_ptr.*);
     }
+
+    const flecs_module = b.dependency("flecs", .{
+        .target = target,
+        .optimize = optimize,
+    }).module("flecs");
+    exe.root_module.addImport("flecs", flecs_module);
 
     exe.linkLibC();
     unit_tests.linkLibC();

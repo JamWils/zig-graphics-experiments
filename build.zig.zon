@@ -10,9 +10,10 @@
         "LICENSE",
     }, 
     .dependencies = .{
-        .zmath = .{ .path = "libs/zmath" },
+        .flecs = .{ .path = "libs/flecs" },
         .objc = .{ .path = "libs/objc" },
         .scene = .{ .path = "libs/scene" },
         .stb = .{ .path = "libs/stb" },
+        .zmath = .{ .path = "libs/zmath" },
     } 
 }

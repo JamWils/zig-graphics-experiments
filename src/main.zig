@@ -1,15 +1,17 @@
 const std = @import("std");
+const app = @import("app.zig");
 const testing = std.testing;
 const builtin = @import("builtin");
 const VulkanEngine = @import("vulkan_engine.zig");
 const MetalEngine = @import("metal_engine.zig");
-
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer if (gpa.deinit() == .leak) {
         @panic("Leaked memory");
     };
+
+    // try app.run();
 
     if (builtin.os.tag == .windows) {
         var engine = VulkanEngine.init(gpa.allocator()) catch |err| {
@@ -26,6 +28,7 @@ pub fn main() !void {
         };
         defer engine.cleanup();
         try engine.run();
+        
     } else {
         @panic("platform not supported");
     }

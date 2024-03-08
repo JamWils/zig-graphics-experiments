@@ -32,7 +32,7 @@ ENV VK_LAYER_PATH="${VULKAN_SDK}/etc/vulkan/explicit_layer.d"
 
 # Install Flecs
 # https://github.com/SanderMertens/flecs/archive/refs/tags/v3.2.11.tar.gz
-ENV FLECS_VERSION=3.2.11
+ENV FLECS_VERSION=3.2.7
 RUN cd /tmp && \
     curl -L -O https://github.com/SanderMertens/flecs/archive/refs/tags/v${FLECS_VERSION}.tar.gz && \
     ls -l && \
