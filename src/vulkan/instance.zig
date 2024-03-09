@@ -21,6 +21,24 @@ pub const Instance = struct {
     debug_messenger: c.VkDebugUtilsMessengerEXT = null,
 };
 
+pub fn createAppInstance(alloc: std.mem.Allocator, window: *c.SDL_Window) Instance {
+    var arena_alloc = std.heap.ArenaAllocator.init(alloc);
+    defer arena_alloc.deinit();
+
+    const arena = arena_alloc.allocator();
+    var sdl_extensions_count: u32 = undefined;
+    _ = c.SDL_Vulkan_GetInstanceExtensions(window, &sdl_extensions_count, null);
+    const sdl_required_extensions = arena.alloc([*c]const u8, sdl_extensions_count) catch unreachable;
+    _ = c.SDL_Vulkan_GetInstanceExtensions(window, &sdl_extensions_count, sdl_required_extensions.ptr);
+
+    const instance = createInstance(alloc, .{ .application_name = "Vulkan App", .application_version = c.VK_MAKE_VERSION(0, 1, 0), .engine_name = "Snap Engine", .engine_version = c.VK_MAKE_VERSION(0, 1, 0), .api_version = c.VK_API_VERSION_1_3, .debug = true, .required_extensions = sdl_required_extensions }) catch |err| {
+        log.err("Failed to create a Vulkan Instance with error: {s}", .{@errorName(err)});
+        unreachable;
+    };
+
+    return instance;
+}
+
 pub fn createInstance(alloc: std.mem.Allocator, opts: VkInstanceOpts) !Instance {
     if (opts.api_version > c.VK_MAKE_VERSION(1, 1, 0)) {
         var api_requested = opts.api_version;
