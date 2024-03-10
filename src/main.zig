@@ -16,10 +16,8 @@ pub fn main() !void {
 
     const world = ecs.init();
     defer _ = ecs.fini(world);
-
-    ecs.COMPONENT(world, app.Allocator);
-    _ = ecs.singleton_set(world, app.Allocator, app.Allocator{ .alloc = gpa.allocator() });
-
+    
+    app.init(world, gpa.allocator());
     sdl.init(world);
 
     if (builtin.os.tag == .windows) {

@@ -30,7 +30,7 @@ const VulkanEngine = struct {
     graphics_queue: c.VkQueue,
     presentation_queue: c.VkQueue,
     swapchain: c.VkSwapchainKHR,
-    swapchain_image_format: c.VkFormat,
+    // swapchain_image_format: c.VkFormat,
     swapchain_extent: c.VkExtent2D,
 
     swapchain_images: []c.VkImage,
@@ -341,6 +341,7 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
     const physical_device = try vkd.getPhysicalDevice(alloc, instance.handle, surface, &required_device_extensions);
     const device = try vkd.createLogicalDevice(alloc, physical_device, &required_device_extensions);
 
+    // REFACTOR - I am here
     const swapchain = try vks.createSwapchain(alloc, physical_device.handle, device.handle, surface, .{
         .graphics_queue_index = physical_device.queue_indices.graphics_queue_location,
         .presentation_queue_index = physical_device.queue_indices.presentation_queue_location,
@@ -348,7 +349,7 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
         .window_width = @intCast(window_width),
     });
 
-    const model_uniform_alignment = vkds.pad_with_buffer_offset(@sizeOf(scene.UBO), physical_device.min_uniform_buffer_offset_alignment);
+    const model_uniform_alignment = vkds.padWithBufferOffset(@sizeOf(scene.UBO), physical_device.min_uniform_buffer_offset_alignment);
 
     const render_pass = try vkr.createRenderPass(physical_device.handle, device.handle, swapchain.surface_format.format);
     const descriptor_set_layout = try vkds.createDescriptorSetLayout(device.handle);
@@ -527,7 +528,7 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
         .graphics_queue = device.graphics_queue,
         .presentation_queue = device.presentation_queue,
         .swapchain = swapchain.handle,
-        .swapchain_image_format = swapchain.surface_format.format,
+        // .swapchain_image_format = swapchain.surface_format.format,
         .swapchain_extent = swapchain.image_extent,
         .swapchain_images = swapchain.images,
         .swapchain_image_views = swapchain.image_views,

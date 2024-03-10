@@ -1,9 +1,9 @@
 const std = @import("std");
 const ecs = @import("flecs");
 const c = @import("clibs.zig");
+const app = @import("app.zig");
 const log = std.log.scoped(.sdl);
 
-const CanvasSize = struct { width: c_int, height: c_int };
 pub const Window = struct {
     handle: *c.SDL_Window,
     width: c_int,
@@ -16,7 +16,7 @@ fn createWindow(it: *ecs.iter_t) callconv(.C) void {
 
     for (0..it.count()) |i| {
         const e = it.entities()[i];
-        const size = ecs.get(it.world, e, CanvasSize).?;
+        const size = ecs.get(it.world, e, app.CanvasSize).?;
 
         const sdl_window = c.SDL_CreateWindow(
             "App Engine",
@@ -49,7 +49,8 @@ fn processEvents(it: *ecs.iter_t) callconv(.C) void {
     var event: c.SDL_Event = undefined;
     while (c.SDL_PollEvent(&event) != 0) {
         if(event.type == c.SDL_QUIT) {
-            ecs.quit(it.world);
+            // ecs.quit(it.world);
+            ecs.enable(it.world, ecs.id(app.OnStop), true);
         }
     }
 }
@@ -58,22 +59,13 @@ pub fn init(world: *ecs.world_t) void {
     checkSdl(c.SDL_Init(c.SDL_INIT_VIDEO));
     
     ecs.COMPONENT(world, Window);
-    ecs.COMPONENT(world, CanvasSize);
 
     var desc = ecs.system_desc_t{
         .callback = createWindow,
     };
-    desc.query.filter.terms[0] = .{ .id = ecs.id(CanvasSize), .inout = ecs.inout_kind_t.In };
+    desc.query.filter.terms[0] = .{ .id = ecs.id(app.CanvasSize), .inout = ecs.inout_kind_t.In };
     desc.query.filter.terms[1] = .{ .id = ecs.id(Window), .inout = ecs.inout_kind_t.Out };
     ecs.SYSTEM(world, "InitWindowSystem", ecs.OnStart, &desc);
-
-    // var desc = ecs.observer_desc_t{
-    //     .callback = createWindow,
-    // };
-    // desc.filter.terms[0] = .{ .id = ecs.id(CanvasSize), .inout = ecs.inout_kind_t.In };
-    // desc.filter.terms[1] = .{ .id = ecs.id(Window), .inout = ecs.inout_kind_t.Out };
-    // desc.events[0] = ecs.OnSet;
-    // ecs.OBSERVER(world, "InitSystem", &desc);
 
     var destroy_desc = ecs.observer_desc_t{
         .callback = destroyWindow,
@@ -88,7 +80,7 @@ pub fn init(world: *ecs.world_t) void {
 
     const window = ecs.new_entity(world, "Window");
     _ = ecs.set(world, window, Window, .{ .handle = undefined, .width = 0, .height = 0 });
-    _ = ecs.set(world, window, CanvasSize, .{ .width = 800, .height = 600 });
+    _ = ecs.set(world, window, app.CanvasSize, .{ .width = 800, .height = 600 });
 }
 
 pub fn checkSdl(res: c_int) void {
