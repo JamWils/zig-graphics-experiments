@@ -78,7 +78,6 @@ const VulkanEngine = struct {
 
     pub fn cleanup(self: *VulkanEngine) void {
         _ = c.vkDeviceWaitIdle(self.device);
-
         
         self.allocator.free(self.sampler_descriptor_sets);
         c.vkDestroySampler(self.device, self.texture_sampler, null);
@@ -341,7 +340,6 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
     const physical_device = try vkd.getPhysicalDevice(alloc, instance.handle, surface, &required_device_extensions);
     const device = try vkd.createLogicalDevice(alloc, physical_device, &required_device_extensions);
 
-    // REFACTOR - I am here
     const swapchain = try vks.createSwapchain(alloc, physical_device.handle, device.handle, surface, .{
         .graphics_queue_index = physical_device.queue_indices.graphics_queue_location,
         .presentation_queue_index = physical_device.queue_indices.presentation_queue_location,
@@ -351,6 +349,7 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
 
     const model_uniform_alignment = vkds.padWithBufferOffset(@sizeOf(scene.UBO), physical_device.min_uniform_buffer_offset_alignment);
 
+    // REFACTOR - I am here
     const render_pass = try vkr.createRenderPass(physical_device.handle, device.handle, swapchain.surface_format.format);
     const descriptor_set_layout = try vkds.createDescriptorSetLayout(device.handle);
     const sampler_descriptor_set_layout = try vkds.createSamplerDescriptorSetLayout(device.handle);
@@ -381,7 +380,7 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
     });
     const depth_image = try vks.createDepthBufferImage(physical_device.handle, device.handle, swapchain.image_extent);
     const swapchain_framebuffers = try vks.createFramebuffer(alloc, device.handle, swapchain, depth_image, render_pass.handle);
-    const graphics_command_pool = try vkc.createCommandPool(device.handle, physical_device.queue_indices);
+    const graphics_command_pool = try vkc.createCommandPool(device.handle, physical_device.queue_indices.graphics_queue_location);
     const command_buffers = try vkc.createCommandBuffers(alloc, device.handle, graphics_command_pool.handle, swapchain_framebuffers.handles.len);
 
     const image_available_semaphores = try vksync.createSemaphores(alloc, device.handle, max_frame_draws);

@@ -1,18 +1,32 @@
 const std = @import("std");
 const ecs = @import("flecs");
 const app = @import("app.zig");
-
 const c = @import("clibs.zig");
 const sdl = @import("sdl.zig");
+const vkc = @import("./vulkan/command.zig");
 const vkd = @import("vulkan/device.zig");
 const vki = @import("vulkan/instance.zig");
 const vks = @import("vulkan/swapchain.zig");
+const vksync = @import("./vulkan/synchronization.zig");
+const vkp = @import("./vulkan/pipeline.zig");
+const vkr = @import("./vulkan/render_pass.zig");
+const vkb = @import("./vulkan/buffer.zig");
+const vkds = @import("./vulkan/descriptor_set.zig");
+const vkt = @import("./vulkan/texture.zig");
+const scene = @import("scene");
+
+const MAX_OBJECTS = 1000;
+const MAX_FRAME_DRAWS = 3;
 
 const Device = struct {
     instance: c.VkInstance,
     physical: c.VkPhysicalDevice,
     logical: c.VkDevice,
     debug_messenger: c.VkDebugUtilsMessengerEXT
+};
+
+const BufferOffset = struct {
+    alignment: u64,
 };
 
 const Surface = struct {
@@ -30,14 +44,46 @@ const Swapchain = struct {
     format: c.VkFormat,
 };
 
+const BufferCount = struct {
+    count: u32,
+};
+
 const ImageAssets = struct {
     images: []c.VkImage,
     image_views: []c.VkImageView,
 };
 
+pub const RenderPass = struct {
+    handle: c.VkRenderPass,
+};
+
+pub const DepthImage = struct {
+    image: c.VkImage,
+    image_view: c.VkImageView,
+    memory: c.VkDeviceMemory,
+};
+
+pub const DescriptorSetLayout = struct {
+    handle: c.VkDescriptorSetLayout,
+    sampler_handle: c.VkDescriptorSetLayout,
+};
+
+pub const UniformBuffers = struct {
+    buffers: []vkds.BufferSet
+};
+
+pub const DescriptorPool = struct {
+    handle: c.VkDescriptorPool,
+    sampler_handle: c.VkDescriptorPool,
+};
+
+pub const DescriptorSets = struct {
+    sets: []c.VkDescriptorSet,
+};
 
 const vk_alloc_callbacks: ?*c.VkAllocationCallbacks = null;
 
+/// Create the device and its associated surface
 fn createDevice(it: *ecs.iter_t) callconv(.C) void {
     std.debug.print("Start up: {s}\n", .{ecs.get_name(it.world, it.system).?});
     const allocator = ecs.singleton_get(it.world, app.Allocator).?;
@@ -62,6 +108,8 @@ fn createDevice(it: *ecs.iter_t) callconv(.C) void {
             return;
         };
 
+        const model_uniform_alignment = vkds.padWithBufferOffset(@sizeOf(scene.UBO), physical_device.min_uniform_buffer_offset_alignment);
+
         const new_entity = ecs.new_entity(it.world, "VulkanDevice");
         _ = ecs.set(it.world, new_entity, Device, .{ 
             .instance = instance.handle, 
@@ -72,6 +120,7 @@ fn createDevice(it: *ecs.iter_t) callconv(.C) void {
 
         _ = ecs.set(it.world, new_entity, Surface, .{ .handle = surface });
         _ = ecs.set(it.world, new_entity, app.CanvasSize, . { .width = window.width, .height = window.height });
+        _ = ecs.set(it.world, new_entity, BufferOffset, .{ .alignment = model_uniform_alignment });
         _ = ecs.set(it.world, new_entity, QueueIndex, .{ 
             .graphics = physical_device.queue_indices.graphics_queue_location,
             .presentation = physical_device.queue_indices.presentation_queue_location,
@@ -79,6 +128,7 @@ fn createDevice(it: *ecs.iter_t) callconv(.C) void {
     }
 }
 
+/// Destroy the device and its associated surface, this will also destroy the instance
 fn destroyDevice(it: *ecs.iter_t) callconv(.C) void {
     std.debug.print("Shut down: {s}\n", .{ecs.get_name(it.world, it.system).?});
     const devices = ecs.field(it, Device, 1).?;
@@ -100,6 +150,7 @@ fn destroyDevice(it: *ecs.iter_t) callconv(.C) void {
     ecs.quit(it.world);
 }
 
+/// Create the swapchain and its associated image assets
 fn createSwapchain(it: *ecs.iter_t) callconv(.C) void {
     std.debug.print("Start up: {s}\n", .{ecs.get_name(it.world, it.system).?});
     const allocator = ecs.singleton_get(it.world, app.Allocator).?;
@@ -125,6 +176,11 @@ fn createSwapchain(it: *ecs.iter_t) callconv(.C) void {
             return;
         };
 
+        const depth_image = vks.createDepthBufferImage(device.physical, device.logical, swapchain.image_extent) catch |err| {
+            std.debug.print("Failed to create depth image: {}\n", .{err});
+            return;
+        };
+
         _ = ecs.set(it.world, it.entities()[i], Swapchain, .{ 
             .handle = swapchain.handle, 
             .extent = swapchain.image_extent,
@@ -134,10 +190,17 @@ fn createSwapchain(it: *ecs.iter_t) callconv(.C) void {
             .images = swapchain.images, 
             .image_views = swapchain.image_views,
         });
+        _ = ecs.set(it.world, it.entities()[i], DepthImage, .{ 
+            .image = depth_image.image, 
+            .image_view = depth_image.image_view, 
+            .memory = depth_image.memory,
+        });
+        _ = ecs.set(it.world, it.entities()[i], BufferCount, .{ .count = @as(u32, @intCast(swapchain.images.len)) });
         ecs.enable_id(it.world, it.entities()[i], ecs.id(app.CanvasSize), false);
     }
 }
 
+/// Destroy the swapchain and its associated image assets
 fn destroySwapchain(it: *ecs.iter_t) callconv(.C) void {
     std.debug.print("Shut down: {s}\n", .{ecs.get_name(it.world, it.system).?});
     const allocator = ecs.singleton_get(it.world, app.Allocator).?;
@@ -145,11 +208,17 @@ fn destroySwapchain(it: *ecs.iter_t) callconv(.C) void {
     const devices = ecs.field(it, Device, 1).?;
     const swapchains = ecs.field(it, Swapchain, 2).?;
     const image_assets = ecs.field(it, ImageAssets, 3).?;
+    const depth_images = ecs.field(it, DepthImage, 4).?;
 
     for (0..it.count()) |i| {
         const device = devices[i];
         const swapchain = swapchains[i];
         const assets = image_assets[i];
+        const depth_image = depth_images[i];
+
+        c.vkDestroyImageView(device.logical, depth_image.image_view, null);
+        c.vkDestroyImage(device.logical, depth_image.image, null);
+        c.vkFreeMemory(device.logical, depth_image.memory, null);
 
         for (assets.image_views) |image_view| {
             c.vkDestroyImageView(device.logical, image_view, null);
@@ -163,6 +232,131 @@ fn destroySwapchain(it: *ecs.iter_t) callconv(.C) void {
     }
 }
 
+fn createRenderPass(it: *ecs.iter_t) callconv(.C) void {
+    std.debug.print("Start up: {s}\n", .{ecs.get_name(it.world, it.system).?});
+    const allocator = ecs.singleton_get(it.world, app.Allocator).?;
+    const devices = ecs.field(it, Device, 1).?;
+    const swapchains = ecs.field(it, Swapchain, 2).?;
+    const buffer_counts = ecs.field(it, BufferCount, 3).?;
+    const buffer_offsets = ecs.field(it, BufferOffset, 4).?;
+    // const queue = ecs.field(it, QueueIndex, 4).?;
+
+
+    for (0..it.count()) |i| {
+        const device = devices[i];
+        const swapchain = swapchains[i];
+        const buffer_count = buffer_counts[i];
+        const buffer_offset = buffer_offsets[i];
+        // const queue_index = queue[i];
+
+        const render_pass = vkr.createRenderPass(device.physical, device.logical, swapchain.format) catch |err| {
+            std.debug.print("Failed to create render pass: {}\n", .{err});
+            return;
+        };
+
+        const descriptor_set_layout = vkds.createDescriptorSetLayout(device.logical) catch |err| {
+            std.debug.print("Failed to create descriptor set layout: {}\n", .{err});
+            return;
+        };
+
+        const sampler_descriptor_set_layout = vkds.createSamplerDescriptorSetLayout(device.logical) catch |err| {
+            std.debug.print("Failed to create sampler descriptor set layout: {}\n", .{err});
+            return;
+        };
+
+        const uniform_buffers = vkds.createUniformBuffers(allocator.alloc, .{
+            .physical_device = device.physical,
+            .device = device.logical,
+            .buffer_count = buffer_count.count,
+            .model_memory_alignment = buffer_offset.alignment,
+            .max_objects = MAX_OBJECTS,
+        }) catch |err| {
+            std.debug.print("Failed to create uniform buffers: {}\n", .{err});
+            return;
+        };
+
+        const descriptor_pool = vkds.createDescriptorPool(device.logical, buffer_count.count) catch |err| {
+            std.debug.print("Failed to create descriptor pool: {}\n", .{err});
+            return;
+        };
+
+        const sampler_descriptor_pool = vkds.createSamplerDescriptorPool(device.logical, MAX_OBJECTS) catch |err| {
+            std.debug.print("Failed to create sampler descriptor pool: {}\n", .{err});
+            return;
+        };
+
+        const descriptor_sets = vkds.createDescriptorSets(allocator.alloc, buffer_count.count, device.logical, descriptor_pool.handle, descriptor_set_layout.handle, uniform_buffers, buffer_offset.alignment) catch |err| {
+            std.debug.print("Failed to create descriptor sets: {}\n", .{err});
+            return;
+        };
+
+//         const push_constant_range = c.VkPushConstantRange{
+//             .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT,
+//             .offset = 0,
+//             .size = @sizeOf(scene.UBO),
+//         };
+//         const pipeline = try vkp.createGraphicsPipeline(allocator.alloc, .{
+//             .device = device.logical,
+//             .swapchain_extent = swapchain.image_extent,
+//             .render_pass = render_pass.handle,
+//             .descriptor_set_layout = descriptor_set_layout.handle,
+//             .sampler_descriptor_set_layout = sampler_descriptor_set_layout.handle,
+//             .push_constant_range = push_constant_range,
+//         });
+//         const swapchain_framebuffers = try vks.createFramebuffer(allocator.alloc, device.logical, swapchain, depth_image, render_pass.handle);
+//         const graphics_command_pool = try vkc.createCommandPool(device.logical, queue_index.graphics);
+//         const command_buffers = try vkc.createCommandBuffers(allocator.alloc, device.logical, graphics_command_pool.handle, swapchain_framebuffers.handles.len);
+
+//         const image_available_semaphores = try vksync.createSemaphores(allocator.alloc, device.logical, MAX_FRAME_DRAWS);
+//         const render_finished_semaphores = try vksync.createSemaphores(allocator.alloc, device.logical, MAX_FRAME_DRAWS);
+//         const draw_fences = try vksync.createFences(allocator.alloc, device.logical, MAX_FRAME_DRAWS);
+
+        _ = ecs.set(it.world, it.entities()[i], RenderPass, .{ .handle = render_pass.handle });
+        _ = ecs.set(it.world, it.entities()[i], DescriptorSetLayout, .{ .handle = descriptor_set_layout.handle, .sampler_handle = sampler_descriptor_set_layout.handle});
+        _ = ecs.set(it.world, it.entities()[i], UniformBuffers, .{ .buffers = uniform_buffers });
+
+        _ = ecs.set(it.world, it.entities()[i], DescriptorPool, .{ .handle = descriptor_pool.handle, .sampler_handle = sampler_descriptor_pool.handle});
+        _ = ecs.set(it.world, it.entities()[i], DescriptorSets, .{ .sets = descriptor_sets });
+//         _ = ecs.set(it.world, it.entities()[i], vkp.GraphicsPipeline, .{ .handle = pipeline.handle });
+//         _ = ecs.set(it.world, it.entities()[i], vks.Framebuffers, .{ .handles = swapchain_framebuffers.handles });
+//         _ = ecs.set(it.world, it.entities()[i], vkc.CommandPool, .{ .handle = graphics_command_pool.handle });
+//         _ = ecs.set(it.world, it.entities()[i], vkc.CommandBuffers, .{ .handles = command_buffers });
+//         _ = ecs.set(it.world, it.entities()[i], vksync.ImageAvailableSemaphores, .{ .handles = image_available_semaphores.handles });
+//         _ = ecs.set(it.world, it.entities()[i], vksync.RenderFinishedSemaphores, .{ .handles = render_finished_semaphores.handles });
+//         _ = ecs.set(it.world, it.entities()[i], vksync.DrawFences, .{ .handles = draw_fences.handles });
+    } 
+}
+
+fn destroyRenderPass(it: *ecs.iter_t) callconv(.C) void {
+    std.debug.print("Shut down: {s}\n", .{ecs.get_name(it.world, it.system).?});
+
+    const allocator = ecs.singleton_get(it.world, app.Allocator).?;
+    const devices = ecs.field(it, Device, 1).?;
+    const render_passes = ecs.field(it, RenderPass, 2).?;
+    const descriptor_set_layouts = ecs.field(it, DescriptorSetLayout, 3).?;
+    const uniform_buffers = ecs.field(it, UniformBuffers, 4).?;
+    const descriptor_pools = ecs.field(it, DescriptorPool, 5).?;
+    const descriptor_sets = ecs.field(it, DescriptorSets, 6).?;
+
+    for (0..it.count()) |i| {
+        const device = devices[i];
+
+        for (uniform_buffers[i].buffers) |uniform_buffer| {
+            uniform_buffer.deleteAndFree(device.logical);
+        }
+        allocator.alloc.free(uniform_buffers[i].buffers);
+
+        c.vkDestroyDescriptorPool(device.logical, descriptor_pools[i].handle, null);
+        c.vkDestroyDescriptorPool(device.logical, descriptor_pools[i].sampler_handle, null);
+        allocator.alloc.free(descriptor_sets[i].sets);
+
+        // c.vkDestroyPipelineLayout(device.logical, self.pipeline_layout, null);
+        c.vkDestroyDescriptorSetLayout(device.logical, descriptor_set_layouts[i].handle, null);
+        c.vkDestroyDescriptorSetLayout(device.logical, descriptor_set_layouts[i].sampler_handle, null);
+
+        c.vkDestroyRenderPass(device.logical, render_passes[i].handle, null);
+    }
+}
 
 pub fn init(world: *ecs.world_t) void {
     ecs.COMPONENT(world, Device);
@@ -170,6 +364,14 @@ pub fn init(world: *ecs.world_t) void {
     ecs.COMPONENT(world, QueueIndex);
     ecs.COMPONENT(world, Swapchain);
     ecs.COMPONENT(world, ImageAssets);
+    ecs.COMPONENT(world, BufferCount);
+    ecs.COMPONENT(world, BufferOffset);
+    ecs.COMPONENT(world, DepthImage);
+    ecs.COMPONENT(world, RenderPass);
+    ecs.COMPONENT(world, DescriptorSetLayout);
+    ecs.COMPONENT(world, UniformBuffers);
+    ecs.COMPONENT(world, DescriptorPool);
+    ecs.COMPONENT(world, DescriptorSets);
 
     var device_desc = ecs.system_desc_t{};
     device_desc.callback = createDevice;
@@ -182,13 +384,32 @@ pub fn init(world: *ecs.world_t) void {
     swapchain_desc.query.filter.terms[1] = .{ .id = ecs.id(Surface), .inout = ecs.inout_kind_t.In };
     swapchain_desc.query.filter.terms[2] = .{ .id = ecs.id(QueueIndex), .inout = ecs.inout_kind_t.In };
     swapchain_desc.query.filter.terms[3] = .{ .id = ecs.id(app.CanvasSize), .inout = ecs.inout_kind_t.In };
-    ecs.SYSTEM(world, "VulkanSwapchainSystem", ecs.PreFrame, &swapchain_desc);
+    ecs.SYSTEM(world, "VulkanSwapchainSystem", ecs.OnStart, &swapchain_desc);
+
+    var render_pass_desc = ecs.system_desc_t{};
+    render_pass_desc.callback = createRenderPass;
+    render_pass_desc.query.filter.terms[0] = .{ .id = ecs.id(Device), .inout = ecs.inout_kind_t.In };
+    render_pass_desc.query.filter.terms[1] = .{ .id = ecs.id(Swapchain), .inout = ecs.inout_kind_t.In };
+    render_pass_desc.query.filter.terms[2] = .{ .id = ecs.id(BufferCount), .inout = ecs.inout_kind_t.In };
+    render_pass_desc.query.filter.terms[3] = .{ .id = ecs.id(BufferOffset), .inout = ecs.inout_kind_t.In };
+    ecs.SYSTEM(world, "VulkanRenderPassSystem", ecs.OnStart, &render_pass_desc);
+
+    var destroy_render_pass_desc = ecs.system_desc_t{};
+    destroy_render_pass_desc.callback = destroyRenderPass;
+    destroy_render_pass_desc.query.filter.terms[0] = .{ .id = ecs.id(Device), .inout = ecs.inout_kind_t.In };
+    destroy_render_pass_desc.query.filter.terms[1] = .{ .id = ecs.id(RenderPass), .inout = ecs.inout_kind_t.In };
+    destroy_render_pass_desc.query.filter.terms[2] = .{ .id = ecs.id(DescriptorSetLayout), .inout = ecs.inout_kind_t.In };
+    destroy_render_pass_desc.query.filter.terms[3] = .{ .id = ecs.id(UniformBuffers), .inout = ecs.inout_kind_t.In };
+    destroy_render_pass_desc.query.filter.terms[4] = .{ .id = ecs.id(DescriptorPool), .inout = ecs.inout_kind_t.In };
+    destroy_render_pass_desc.query.filter.terms[5] = .{ .id = ecs.id(DescriptorSets), .inout = ecs.inout_kind_t.In };
+    ecs.SYSTEM(world, "DestroyRenderPassSystem", ecs.id(app.OnStop), &destroy_render_pass_desc);
 
     var destroy_swapchain_decs = ecs.system_desc_t{};
     destroy_swapchain_decs.callback = destroySwapchain;
     destroy_swapchain_decs.query.filter.terms[0] = .{ .id = ecs.id(Device), .inout = ecs.inout_kind_t.In };
     destroy_swapchain_decs.query.filter.terms[1] = .{ .id = ecs.id(Swapchain), .inout = ecs.inout_kind_t.In };
     destroy_swapchain_decs.query.filter.terms[2] = .{ .id = ecs.id(ImageAssets), .inout = ecs.inout_kind_t.In };
+    destroy_swapchain_decs.query.filter.terms[3] = .{ .id = ecs.id(DepthImage), .inout = ecs.inout_kind_t.In };
     ecs.SYSTEM(world, "DestroySwapchainSystem", ecs.id(app.OnStop), &destroy_swapchain_decs);
 
     var destroy_decs = ecs.system_desc_t{};

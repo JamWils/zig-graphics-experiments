@@ -11,11 +11,11 @@ const CommandBuffers = struct {
     handles: []c.VkCommandBuffer = &.{},
 };
 
-pub fn createCommandPool(device: c.VkDevice, queue_indices: vkd.QueueFamilyIndices) !CommandPool {
+pub fn createCommandPool(device: c.VkDevice, graphics_queue_index: u32) !CommandPool {
     const pool_create_info = std.mem.zeroInit(c.VkCommandPoolCreateInfo, .{
         .sType = c.VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
         .flags = c.VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
-        .queueFamilyIndex = queue_indices.graphics_queue_location,
+        .queueFamilyIndex = graphics_queue_index,
     });
 
     var graphics_command_pool: c.VkCommandPool = undefined;

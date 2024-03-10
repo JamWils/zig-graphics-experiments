@@ -34,11 +34,4 @@ pub fn run(world: *ecs.world_t) void {
             std.debug.print("Quitting...\n", .{});
         }
     }
-    // pub fn run(world: *world_t, system: entity_t, delta_time: ftime_t, param: ?*anyopaque) entity_t {
-    // const on_stop_system = ecs.get(world, ecs.id(OnStop), OnStop);
-    // _ = ecs.run(world, ecs.id(OnStop), 0, null);
 }
-
-// pub fn clean_up(world: *ecs.world_t) void {
-//     ecs.run(world, CleanUp, 0, null, null);
-// }

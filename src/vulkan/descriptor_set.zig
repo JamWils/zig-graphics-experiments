@@ -270,7 +270,7 @@ pub fn createTextureDescriptorSets(a: std.mem.Allocator, device: c.VkDevice, des
     return sets;
 }
 
-pub fn allocate_model_transfer_space(a: std.mem.Allocator, offset_alignment: u64, max_objects: u32) ![]scene.UBO {
+pub fn allocateModelTransferSpace(a: std.mem.Allocator, offset_alignment: u64, max_objects: u32) ![]scene.UBO {
     const padded_alignment = padWithBufferOffset(@sizeOf(scene.UBO), offset_alignment);
     const data_size = padded_alignment * max_objects;
 
