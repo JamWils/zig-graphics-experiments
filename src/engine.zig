@@ -81,6 +81,35 @@ pub const DescriptorSets = struct {
     sets: []c.VkDescriptorSet,
 };
 
+pub const Pipeline = struct {
+    graphics_handle: c.VkPipeline,
+    layout: c.VkPipelineLayout,
+};
+
+pub const Framebuffers = struct {
+    handles: []c.VkFramebuffer,
+};
+
+pub const CommandBuffers = struct {
+    handles: []c.VkCommandBuffer,
+};
+
+pub const CommandPool = struct {
+    handle: c.VkCommandPool,
+};
+
+pub const ImageAvailableSemaphores = struct {
+    handles: []c.VkSemaphore,
+};
+
+pub const RenderFinishedSemaphores = struct {
+    handles: []c.VkSemaphore,
+};
+
+pub const DrawFences = struct {
+    handles: []c.VkFence,
+};
+
 const vk_alloc_callbacks: ?*c.VkAllocationCallbacks = null;
 
 /// Create the device and its associated surface
@@ -239,6 +268,8 @@ fn createRenderPass(it: *ecs.iter_t) callconv(.C) void {
     const swapchains = ecs.field(it, Swapchain, 2).?;
     const buffer_counts = ecs.field(it, BufferCount, 3).?;
     const buffer_offsets = ecs.field(it, BufferOffset, 4).?;
+    const depth_images = ecs.field(it, DepthImage, 5).?;
+    const images_assets = ecs.field(it, ImageAssets, 6).?;
     // const queue = ecs.field(it, QueueIndex, 4).?;
 
 
@@ -247,6 +278,8 @@ fn createRenderPass(it: *ecs.iter_t) callconv(.C) void {
         const swapchain = swapchains[i];
         const buffer_count = buffer_counts[i];
         const buffer_offset = buffer_offsets[i];
+        const depth_image = depth_images[i];
+        const image_assets = images_assets[i];
         // const queue_index = queue[i];
 
         const render_pass = vkr.createRenderPass(device.physical, device.logical, swapchain.format) catch |err| {
@@ -290,40 +323,43 @@ fn createRenderPass(it: *ecs.iter_t) callconv(.C) void {
             return;
         };
 
-//         const push_constant_range = c.VkPushConstantRange{
-//             .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT,
-//             .offset = 0,
-//             .size = @sizeOf(scene.UBO),
-//         };
-//         const pipeline = try vkp.createGraphicsPipeline(allocator.alloc, .{
-//             .device = device.logical,
-//             .swapchain_extent = swapchain.image_extent,
-//             .render_pass = render_pass.handle,
-//             .descriptor_set_layout = descriptor_set_layout.handle,
-//             .sampler_descriptor_set_layout = sampler_descriptor_set_layout.handle,
-//             .push_constant_range = push_constant_range,
-//         });
-//         const swapchain_framebuffers = try vks.createFramebuffer(allocator.alloc, device.logical, swapchain, depth_image, render_pass.handle);
-//         const graphics_command_pool = try vkc.createCommandPool(device.logical, queue_index.graphics);
-//         const command_buffers = try vkc.createCommandBuffers(allocator.alloc, device.logical, graphics_command_pool.handle, swapchain_framebuffers.handles.len);
+        const push_constant_range = c.VkPushConstantRange{
+            .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT,
+            .offset = 0,
+            .size = @sizeOf(scene.UBO),
+        };
 
-//         const image_available_semaphores = try vksync.createSemaphores(allocator.alloc, device.logical, MAX_FRAME_DRAWS);
-//         const render_finished_semaphores = try vksync.createSemaphores(allocator.alloc, device.logical, MAX_FRAME_DRAWS);
-//         const draw_fences = try vksync.createFences(allocator.alloc, device.logical, MAX_FRAME_DRAWS);
+        const pipeline = vkp.createGraphicsPipeline(allocator.alloc, .{
+            .device = device.logical,
+            .swapchain_extent = swapchain.extent,
+            .render_pass = render_pass.handle,
+            .descriptor_set_layout = descriptor_set_layout.handle,
+            .sampler_descriptor_set_layout = sampler_descriptor_set_layout.handle,
+            .push_constant_range = push_constant_range,
+        }) catch |err| {
+            std.debug.print("Failed to create graphics pipeline: {}\n", .{err});
+            return;
+        };
+
+        const swapchain_framebuffers = vks.createFramebuffer2(allocator.alloc, .{
+            .device = device.logical,
+            .extent = swapchain.extent,
+            .image_views = image_assets.image_views,
+            .image_count = buffer_count.count,
+            .render_pass = render_pass.handle,
+            .depth_image_view = depth_image.image_view,
+        }) catch |err| {
+            std.debug.print("Failed to create framebuffers: {}\n", .{err});
+            return;
+        };
 
         _ = ecs.set(it.world, it.entities()[i], RenderPass, .{ .handle = render_pass.handle });
         _ = ecs.set(it.world, it.entities()[i], DescriptorSetLayout, .{ .handle = descriptor_set_layout.handle, .sampler_handle = sampler_descriptor_set_layout.handle});
         _ = ecs.set(it.world, it.entities()[i], UniformBuffers, .{ .buffers = uniform_buffers });
-
         _ = ecs.set(it.world, it.entities()[i], DescriptorPool, .{ .handle = descriptor_pool.handle, .sampler_handle = sampler_descriptor_pool.handle});
         _ = ecs.set(it.world, it.entities()[i], DescriptorSets, .{ .sets = descriptor_sets });
-//         _ = ecs.set(it.world, it.entities()[i], vkp.GraphicsPipeline, .{ .handle = pipeline.handle });
-//         _ = ecs.set(it.world, it.entities()[i], vks.Framebuffers, .{ .handles = swapchain_framebuffers.handles });
-//         _ = ecs.set(it.world, it.entities()[i], vkc.CommandPool, .{ .handle = graphics_command_pool.handle });
-//         _ = ecs.set(it.world, it.entities()[i], vkc.CommandBuffers, .{ .handles = command_buffers });
-//         _ = ecs.set(it.world, it.entities()[i], vksync.ImageAvailableSemaphores, .{ .handles = image_available_semaphores.handles });
-//         _ = ecs.set(it.world, it.entities()[i], vksync.RenderFinishedSemaphores, .{ .handles = render_finished_semaphores.handles });
-//         _ = ecs.set(it.world, it.entities()[i], vksync.DrawFences, .{ .handles = draw_fences.handles });
+        _ = ecs.set(it.world, it.entities()[i], Pipeline, .{ .graphics_handle = pipeline.graphics_pipeline_handle, .layout = pipeline.layout });
+        _ = ecs.set(it.world, it.entities()[i], Framebuffers, .{ .handles = swapchain_framebuffers.handles });
     } 
 }
 
@@ -337,9 +373,17 @@ fn destroyRenderPass(it: *ecs.iter_t) callconv(.C) void {
     const uniform_buffers = ecs.field(it, UniformBuffers, 4).?;
     const descriptor_pools = ecs.field(it, DescriptorPool, 5).?;
     const descriptor_sets = ecs.field(it, DescriptorSets, 6).?;
+    const pipelines = ecs.field(it, Pipeline, 7).?;
+    const framebuffers = ecs.field(it, Framebuffers, 8).?;
 
     for (0..it.count()) |i| {
         const device = devices[i];
+
+        for (framebuffers[i].handles) |handle| {
+            c.vkDestroyFramebuffer(device.logical, handle, null);
+        }
+        allocator.alloc.free(framebuffers[i].handles);
+        c.vkDestroyPipeline(device.logical, pipelines[i].graphics_handle, null);
 
         for (uniform_buffers[i].buffers) |uniform_buffer| {
             uniform_buffer.deleteAndFree(device.logical);
@@ -350,11 +394,89 @@ fn destroyRenderPass(it: *ecs.iter_t) callconv(.C) void {
         c.vkDestroyDescriptorPool(device.logical, descriptor_pools[i].sampler_handle, null);
         allocator.alloc.free(descriptor_sets[i].sets);
 
-        // c.vkDestroyPipelineLayout(device.logical, self.pipeline_layout, null);
+        c.vkDestroyPipelineLayout(device.logical, pipelines[i].layout, null);
         c.vkDestroyDescriptorSetLayout(device.logical, descriptor_set_layouts[i].handle, null);
         c.vkDestroyDescriptorSetLayout(device.logical, descriptor_set_layouts[i].sampler_handle, null);
 
         c.vkDestroyRenderPass(device.logical, render_passes[i].handle, null);
+    }
+}
+
+fn createCommandBuffers(it: *ecs.iter_t) callconv(.C) void {
+    std.debug.print("Start up: {s}\n", .{ecs.get_name(it.world, it.system).?});
+    const allocator = ecs.singleton_get(it.world, app.Allocator).?;
+    const devices = ecs.field(it, Device, 1).?;
+    const queue = ecs.field(it, QueueIndex, 2).?;
+    const buffer_counts = ecs.field(it, BufferCount, 3).?;
+
+    for (0..it.count()) |i| {
+        const device = devices[i];
+        const queue_index = queue[i];
+        const buffer_count = buffer_counts[i];
+
+        const graphics_command_pool = vkc.createCommandPool(device.logical, queue_index.graphics) catch |err| {
+            std.debug.print("Failed to create command pool: {}\n", .{err});
+            return;
+        };
+
+        const command_buffers = vkc.createCommandBuffers(allocator.alloc, device.logical, graphics_command_pool.handle, buffer_count.count) catch |err| {
+            std.debug.print("Failed to create command buffers: {}\n", .{err});
+            return;
+        };
+
+        const image_available_semaphores = vksync.createSemaphores(allocator.alloc, device.logical, MAX_FRAME_DRAWS) catch |err| {
+            std.debug.print("Failed to create image available semaphores: {}\n", .{err});
+            return;
+        };
+
+        const render_finished_semaphores = vksync.createSemaphores(allocator.alloc, device.logical, MAX_FRAME_DRAWS) catch |err| {
+            std.debug.print("Failed to create render finished semaphores: {}\n", .{err});
+            return;
+        };
+
+        const draw_fences = vksync.createFences(allocator.alloc, device.logical, MAX_FRAME_DRAWS) catch |err| {
+            std.debug.print("Failed to create draw fences: {}\n", .{err});
+            return;
+        };
+
+        _ = ecs.set(it.world, it.entities()[i], CommandPool, .{ .handle = graphics_command_pool.handle });
+        _ = ecs.set(it.world, it.entities()[i], CommandBuffers, .{ .handles = command_buffers.handles });
+        _ = ecs.set(it.world, it.entities()[i], ImageAvailableSemaphores, .{ .handles = image_available_semaphores.handles });
+        _ = ecs.set(it.world, it.entities()[i], RenderFinishedSemaphores, .{ .handles = render_finished_semaphores.handles });
+        _ = ecs.set(it.world, it.entities()[i], DrawFences, .{ .handles = draw_fences.handles });
+    }
+}
+
+fn destroyCommandBuffers(it: *ecs.iter_t) callconv(.C) void {
+    std.debug.print("Shut down: {s}\n", .{ecs.get_name(it.world, it.system).?});
+    const allocator = ecs.singleton_get(it.world, app.Allocator).?;
+    const devices = ecs.field(it, Device, 1).?;
+    const command_pools = ecs.field(it, CommandPool, 2).?;
+    const command_buffers = ecs.field(it, CommandBuffers, 3).?;
+    const image_available_semaphores = ecs.field(it, ImageAvailableSemaphores, 4).?;
+    const render_finished_semaphores = ecs.field(it, RenderFinishedSemaphores, 5).?;
+    const draw_fences = ecs.field(it, DrawFences, 6).?;
+
+    for (0..it.count()) |i| {
+        const device = devices[i];
+        const command_pool = command_pools[i];
+        const command_buffer = command_buffers[i];
+        const image_available_semaphore = image_available_semaphores[i];
+        const render_finished_semaphore = render_finished_semaphores[i];
+        const draw_fence = draw_fences[i];
+
+        for (0..MAX_FRAME_DRAWS) |j| {
+            c.vkDestroyFence(device.logical, draw_fence.handles[j], null);
+            c.vkDestroySemaphore(device.logical, image_available_semaphore.handles[j], null);
+            c.vkDestroySemaphore(device.logical, render_finished_semaphore.handles[j], null);
+        }
+
+        c.vkDestroyCommandPool(device.logical, command_pool.handle, null);
+        // TODO: Do I need to destroy these buffers?
+        allocator.alloc.free(command_buffer.handles);
+        allocator.alloc.free(image_available_semaphore.handles);
+        allocator.alloc.free(render_finished_semaphore.handles);
+        allocator.alloc.free(draw_fence.handles);
     }
 }
 
@@ -372,6 +494,13 @@ pub fn init(world: *ecs.world_t) void {
     ecs.COMPONENT(world, UniformBuffers);
     ecs.COMPONENT(world, DescriptorPool);
     ecs.COMPONENT(world, DescriptorSets);
+    ecs.COMPONENT(world, Pipeline);
+    ecs.COMPONENT(world, Framebuffers);
+    ecs.COMPONENT(world, CommandPool);
+    ecs.COMPONENT(world, CommandBuffers);
+    ecs.COMPONENT(world, ImageAvailableSemaphores);
+    ecs.COMPONENT(world, RenderFinishedSemaphores);
+    ecs.COMPONENT(world, DrawFences);
 
     var device_desc = ecs.system_desc_t{};
     device_desc.callback = createDevice;
@@ -392,7 +521,26 @@ pub fn init(world: *ecs.world_t) void {
     render_pass_desc.query.filter.terms[1] = .{ .id = ecs.id(Swapchain), .inout = ecs.inout_kind_t.In };
     render_pass_desc.query.filter.terms[2] = .{ .id = ecs.id(BufferCount), .inout = ecs.inout_kind_t.In };
     render_pass_desc.query.filter.terms[3] = .{ .id = ecs.id(BufferOffset), .inout = ecs.inout_kind_t.In };
+    render_pass_desc.query.filter.terms[4] = .{ .id = ecs.id(DepthImage), .inout = ecs.inout_kind_t.In };
+    render_pass_desc.query.filter.terms[5] = .{ .id = ecs.id(ImageAssets), .inout = ecs.inout_kind_t.In };
     ecs.SYSTEM(world, "VulkanRenderPassSystem", ecs.OnStart, &render_pass_desc);
+
+    var command_buffer_desc = ecs.system_desc_t{};
+    command_buffer_desc.callback = createCommandBuffers;
+    command_buffer_desc.query.filter.terms[0] = .{ .id = ecs.id(Device), .inout = ecs.inout_kind_t.In };
+    command_buffer_desc.query.filter.terms[1] = .{ .id = ecs.id(QueueIndex), .inout = ecs.inout_kind_t.In };
+    command_buffer_desc.query.filter.terms[2] = .{ .id = ecs.id(BufferCount), .inout = ecs.inout_kind_t.In };
+    ecs.SYSTEM(world, "VulkanCommandBufferSystem", ecs.OnStart, &command_buffer_desc);
+
+    var destroy_command_buffer_desc = ecs.system_desc_t{};
+    destroy_command_buffer_desc.callback = destroyCommandBuffers;
+    destroy_command_buffer_desc.query.filter.terms[0] = .{ .id = ecs.id(Device), .inout = ecs.inout_kind_t.In };
+    destroy_command_buffer_desc.query.filter.terms[1] = .{ .id = ecs.id(CommandPool), .inout = ecs.inout_kind_t.In };
+    destroy_command_buffer_desc.query.filter.terms[2] = .{ .id = ecs.id(CommandBuffers), .inout = ecs.inout_kind_t.In };
+    destroy_command_buffer_desc.query.filter.terms[3] = .{ .id = ecs.id(ImageAvailableSemaphores), .inout = ecs.inout_kind_t.In };
+    destroy_command_buffer_desc.query.filter.terms[4] = .{ .id = ecs.id(RenderFinishedSemaphores), .inout = ecs.inout_kind_t.In };
+    destroy_command_buffer_desc.query.filter.terms[5] = .{ .id = ecs.id(DrawFences), .inout = ecs.inout_kind_t.In };
+    ecs.SYSTEM(world, "DestroyCommandBufferSystem", ecs.id(app.OnStop), &destroy_command_buffer_desc);
 
     var destroy_render_pass_desc = ecs.system_desc_t{};
     destroy_render_pass_desc.callback = destroyRenderPass;
@@ -402,6 +550,8 @@ pub fn init(world: *ecs.world_t) void {
     destroy_render_pass_desc.query.filter.terms[3] = .{ .id = ecs.id(UniformBuffers), .inout = ecs.inout_kind_t.In };
     destroy_render_pass_desc.query.filter.terms[4] = .{ .id = ecs.id(DescriptorPool), .inout = ecs.inout_kind_t.In };
     destroy_render_pass_desc.query.filter.terms[5] = .{ .id = ecs.id(DescriptorSets), .inout = ecs.inout_kind_t.In };
+    destroy_render_pass_desc.query.filter.terms[6] = .{ .id = ecs.id(Pipeline), .inout = ecs.inout_kind_t.In };
+    destroy_render_pass_desc.query.filter.terms[7] = .{ .id = ecs.id(Framebuffers), .inout = ecs.inout_kind_t.In };
     ecs.SYSTEM(world, "DestroyRenderPassSystem", ecs.id(app.OnStop), &destroy_render_pass_desc);
 
     var destroy_swapchain_decs = ecs.system_desc_t{};
