@@ -349,7 +349,6 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
 
     const model_uniform_alignment = vkds.padWithBufferOffset(@sizeOf(scene.UBO), physical_device.min_uniform_buffer_offset_alignment);
 
-    // REFACTOR - I am here
     const render_pass = try vkr.createRenderPass(physical_device.handle, device.handle, swapchain.surface_format.format);
     const descriptor_set_layout = try vkds.createDescriptorSetLayout(device.handle);
     const sampler_descriptor_set_layout = try vkds.createSamplerDescriptorSetLayout(device.handle);
@@ -460,9 +459,9 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
         .vertices = alloc.dupe(scene.Vertex, vertices[0..]) catch @panic("Out of memory"),
         .indices = alloc.dupe(u32, indices[0..]) catch @panic("Out of memory"),
         .texture_id = 0,
-        .model = scene.UBO{
-            .model = zmath.identity(),
-        },
+        // .model = scene.UBO{
+        //     .model = zmath.identity(),
+        // },
     };
     defer alloc.free(first_mesh.vertices);
     defer alloc.free(first_mesh.indices);
@@ -471,9 +470,9 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
         .vertices = alloc.dupe(scene.Vertex, vertices_two[0..]) catch @panic("Out of memory"),
         .indices = alloc.dupe(u32, indices[0..]) catch @panic("Out of memory"),
         .texture_id = 0,
-        .model = scene.UBO{
-            .model = zmath.identity(),
-        },
+        // .model = scene.UBO{
+        //     .model = zmath.identity(),
+        // },
     };
     defer alloc.free(second_mesh.vertices);
     defer alloc.free(second_mesh.indices);

@@ -1,18 +1,18 @@
 const std = @import("std");
 const ecs = @import("flecs");
-const app = @import("app.zig");
-const c = @import("clibs.zig");
-const sdl = @import("sdl.zig");
-const vkc = @import("./vulkan/command.zig");
-const vkd = @import("vulkan/device.zig");
-const vki = @import("vulkan/instance.zig");
-const vks = @import("vulkan/swapchain.zig");
-const vksync = @import("./vulkan/synchronization.zig");
-const vkp = @import("./vulkan/pipeline.zig");
-const vkr = @import("./vulkan/render_pass.zig");
-const vkb = @import("./vulkan/buffer.zig");
-const vkds = @import("./vulkan/descriptor_set.zig");
-const vkt = @import("./vulkan/texture.zig");
+const app = @import("../app.zig");
+const c = @import("../clibs.zig");
+const sdl = @import("../sdl.zig");
+const vkc = @import("command.zig");
+const vkd = @import("device.zig");
+const vki = @import("instance.zig");
+const vks = @import("swapchain.zig");
+const vksync = @import("synchronization.zig");
+const vkp = @import("pipeline.zig");
+const vkr = @import("render_pass.zig");
+const vkb = @import("buffer.zig");
+const vkds = @import("descriptor_set.zig");
+const vkt = @import("texture.zig");
 const scene = @import("scene");
 
 const MAX_OBJECTS = 1000;
@@ -505,7 +505,7 @@ pub fn init(world: *ecs.world_t) void {
     var device_desc = ecs.system_desc_t{};
     device_desc.callback = createDevice;
     device_desc.query.filter.terms[0] = .{ .id = ecs.id(sdl.Window), .inout = ecs.inout_kind_t.In };
-    ecs.SYSTEM(world, "VulkanDeviceSystem", ecs.OnStart, &device_desc);
+    ecs.SYSTEM(world, "VkStartDeviceSystem", ecs.OnStart, &device_desc);
 
     var swapchain_desc = ecs.system_desc_t{};
     swapchain_desc.callback = createSwapchain;
@@ -513,7 +513,7 @@ pub fn init(world: *ecs.world_t) void {
     swapchain_desc.query.filter.terms[1] = .{ .id = ecs.id(Surface), .inout = ecs.inout_kind_t.In };
     swapchain_desc.query.filter.terms[2] = .{ .id = ecs.id(QueueIndex), .inout = ecs.inout_kind_t.In };
     swapchain_desc.query.filter.terms[3] = .{ .id = ecs.id(app.CanvasSize), .inout = ecs.inout_kind_t.In };
-    ecs.SYSTEM(world, "VulkanSwapchainSystem", ecs.OnStart, &swapchain_desc);
+    ecs.SYSTEM(world, "VkStartSwapchainSystem", ecs.OnStart, &swapchain_desc);
 
     var render_pass_desc = ecs.system_desc_t{};
     render_pass_desc.callback = createRenderPass;
@@ -523,14 +523,14 @@ pub fn init(world: *ecs.world_t) void {
     render_pass_desc.query.filter.terms[3] = .{ .id = ecs.id(BufferOffset), .inout = ecs.inout_kind_t.In };
     render_pass_desc.query.filter.terms[4] = .{ .id = ecs.id(DepthImage), .inout = ecs.inout_kind_t.In };
     render_pass_desc.query.filter.terms[5] = .{ .id = ecs.id(ImageAssets), .inout = ecs.inout_kind_t.In };
-    ecs.SYSTEM(world, "VulkanRenderPassSystem", ecs.OnStart, &render_pass_desc);
+    ecs.SYSTEM(world, "VkStartRenderPassSystem", ecs.OnStart, &render_pass_desc);
 
     var command_buffer_desc = ecs.system_desc_t{};
     command_buffer_desc.callback = createCommandBuffers;
     command_buffer_desc.query.filter.terms[0] = .{ .id = ecs.id(Device), .inout = ecs.inout_kind_t.In };
     command_buffer_desc.query.filter.terms[1] = .{ .id = ecs.id(QueueIndex), .inout = ecs.inout_kind_t.In };
     command_buffer_desc.query.filter.terms[2] = .{ .id = ecs.id(BufferCount), .inout = ecs.inout_kind_t.In };
-    ecs.SYSTEM(world, "VulkanCommandBufferSystem", ecs.OnStart, &command_buffer_desc);
+    ecs.SYSTEM(world, "VkStartCommandBufferSystem", ecs.OnStart, &command_buffer_desc);
 
     var destroy_command_buffer_desc = ecs.system_desc_t{};
     destroy_command_buffer_desc.callback = destroyCommandBuffers;
@@ -540,7 +540,7 @@ pub fn init(world: *ecs.world_t) void {
     destroy_command_buffer_desc.query.filter.terms[3] = .{ .id = ecs.id(ImageAvailableSemaphores), .inout = ecs.inout_kind_t.In };
     destroy_command_buffer_desc.query.filter.terms[4] = .{ .id = ecs.id(RenderFinishedSemaphores), .inout = ecs.inout_kind_t.In };
     destroy_command_buffer_desc.query.filter.terms[5] = .{ .id = ecs.id(DrawFences), .inout = ecs.inout_kind_t.In };
-    ecs.SYSTEM(world, "DestroyCommandBufferSystem", ecs.id(app.OnStop), &destroy_command_buffer_desc);
+    ecs.SYSTEM(world, "VkDestroyCommandBufferSystem", ecs.id(app.OnStop), &destroy_command_buffer_desc);
 
     var destroy_render_pass_desc = ecs.system_desc_t{};
     destroy_render_pass_desc.callback = destroyRenderPass;
@@ -552,7 +552,7 @@ pub fn init(world: *ecs.world_t) void {
     destroy_render_pass_desc.query.filter.terms[5] = .{ .id = ecs.id(DescriptorSets), .inout = ecs.inout_kind_t.In };
     destroy_render_pass_desc.query.filter.terms[6] = .{ .id = ecs.id(Pipeline), .inout = ecs.inout_kind_t.In };
     destroy_render_pass_desc.query.filter.terms[7] = .{ .id = ecs.id(Framebuffers), .inout = ecs.inout_kind_t.In };
-    ecs.SYSTEM(world, "DestroyRenderPassSystem", ecs.id(app.OnStop), &destroy_render_pass_desc);
+    ecs.SYSTEM(world, "VkDestroyRenderPassSystem", ecs.id(app.OnStop), &destroy_render_pass_desc);
 
     var destroy_swapchain_decs = ecs.system_desc_t{};
     destroy_swapchain_decs.callback = destroySwapchain;
@@ -560,11 +560,11 @@ pub fn init(world: *ecs.world_t) void {
     destroy_swapchain_decs.query.filter.terms[1] = .{ .id = ecs.id(Swapchain), .inout = ecs.inout_kind_t.In };
     destroy_swapchain_decs.query.filter.terms[2] = .{ .id = ecs.id(ImageAssets), .inout = ecs.inout_kind_t.In };
     destroy_swapchain_decs.query.filter.terms[3] = .{ .id = ecs.id(DepthImage), .inout = ecs.inout_kind_t.In };
-    ecs.SYSTEM(world, "DestroySwapchainSystem", ecs.id(app.OnStop), &destroy_swapchain_decs);
+    ecs.SYSTEM(world, "VkDestroySwapchainSystem", ecs.id(app.OnStop), &destroy_swapchain_decs);
 
     var destroy_decs = ecs.system_desc_t{};
     destroy_decs.callback = destroyDevice;
     destroy_decs.query.filter.terms[0] = .{ .id = ecs.id(Device), .inout = ecs.inout_kind_t.In };
     destroy_decs.query.filter.terms[1] = .{ .id = ecs.id(Surface), .inout = ecs.inout_kind_t.In };
-    ecs.SYSTEM(world, "DestroyDeviceSystem", ecs.id(app.OnStop), &destroy_decs);
+    ecs.SYSTEM(world, "VkDestroyDeviceSystem", ecs.id(app.OnStop), &destroy_decs);
 }

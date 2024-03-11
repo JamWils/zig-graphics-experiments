@@ -14,6 +14,10 @@ pub const Mesh = struct {
     vertices: []Vertex,
     indices: []u32,
     texture_id: u32,
-    model: UBO = .{.model = zmath.identity()},
+    // model: UBO = .{.model = zmath.identity()},
+};
+
+pub const Transform = struct {
+    value: zmath.Mat
 };
 

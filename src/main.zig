@@ -1,7 +1,8 @@
 const std = @import("std");
 const ecs = @import("flecs");
 const app = @import("app.zig");
-const eng = @import("engine.zig");
+const eng = @import("./vulkan/engine.zig");
+const scene = @import("scene.zig");
 const sdl = @import("sdl.zig");
 const testing = std.testing;
 const builtin = @import("builtin");
@@ -19,6 +20,7 @@ pub fn main() !void {
     
     app.init(world, gpa.allocator());
     sdl.init(world);
+    scene.init(world);
 
     if (builtin.os.tag == .windows) {
         eng.init(world);

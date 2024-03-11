@@ -2,7 +2,7 @@ const std = @import("std");
 const c = @import("../clibs.zig");
 const vke = @import("./error.zig");
 const vkb = @import("./buffer.zig");
-const engine = @import("../engine.zig");
+const engine = @import("./engine.zig");
 
 pub const SwapchainOpts = struct {
     graphics_queue_index: u32,

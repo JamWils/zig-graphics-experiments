@@ -34,6 +34,8 @@ fn createWindow(it: *ecs.iter_t) callconv(.C) void {
         window[i].handle = sdl_window;
         window[i].width = window_width;
         window[i].height = window_height;
+
+        _ = ecs.singleton_set(it.world, app.CanvasSize, .{ .width = window_width, .height = window_height });
     }
 }
 
