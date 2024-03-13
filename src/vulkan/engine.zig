@@ -131,6 +131,14 @@ pub const IndexBuffer = struct {
     count: u32,
 };
 
+pub const Texture = struct {
+    image: c.VkImage,
+    memory: c.VkDeviceMemory,
+    image_view: c.VkImageView,
+    sampler: c.VkSampler,
+    descriptor_sets: []c.VkDescriptorSet,
+};
+
 const vk_alloc_callbacks: ?*c.VkAllocationCallbacks = null;
 
 /// Create the device and its associated surface
@@ -579,18 +587,60 @@ fn destroyMeshBuffers(it: *ecs.iter_t) callconv(.C) void {
     }
 }
 
-// fn simpleTextureSetUp(it: *ecs.iter_t) callconv(.C) void {
-//     std.debug.print("Start up: {s}\n", .{ecs.get_name(it.world, it.system).?});
+fn simpleTextureSetUp(it: *ecs.iter_t) callconv(.C) void {
+    std.debug.print("Start up: {s}\n", .{ecs.get_name(it.world, it.system).?});
+    const allocator = ecs.singleton_get(it.world, app.Allocator).?;
+    const devices = ecs.field(it, Device, 1).?;
+    const queues = ecs.field(it, Queue, 2).?;
+    const command_pools = ecs.field(it, CommandPool, 3).?;
+    const descriptor_pools = ecs.field(it, DescriptorPool, 4).?;
+    const descriptor_set_layouts = ecs.field(it, DescriptorSetLayout, 5).?;
 
-//     const sample_image = try vkt.loadImageFromFile("assets/sample_floor.png", .{
-//         .physical_device = physical_device.handle,
-//         .device = device.handle,
-//         .transfer_queue = device.graphics_queue,
-//         .command_pool = graphics_command_pool.handle,
-//     });
-//     const texture_sampler = try vkt.createTextureSampler(device.handle);
-//     const sampler_image_view = try vkt.createTextureImageView(alloc, device.handle, sample_image.handle, sampler_descriptor_pool.handle, sampler_descriptor_set_layout.handle, texture_sampler);
-// }
+    for (devices, queues, command_pools, descriptor_pools, descriptor_set_layouts, it.entities()) |device, queue, command_pool, descriptor_pool, descriptor_set_layout, e| {
+        const sample_image = vkt.loadImageFromFile("assets/sample_floor.png", .{
+            .physical_device = device.physical,
+            .device = device.logical,
+            .transfer_queue = queue.graphics,
+            .command_pool = command_pool.handle,
+        }) catch |err| {
+            std.debug.print("Failed to load image: {}\n", .{err});
+            return;
+        };
+
+        const texture_sampler = vkt.createTextureSampler(device.logical) catch |err| {
+            std.debug.print("Failed to create texture sampler: {}\n", .{err});
+            return;
+        };
+
+        const sampler_image_view = vkt.createTextureImageView(allocator.alloc, device.logical, sample_image.handle, descriptor_pool.sampler_handle, descriptor_set_layout.sampler_handle, texture_sampler) catch |err| {
+            std.debug.print("Failed to create texture image view: {}\n", .{err});
+            return;
+        };
+    
+        _ = ecs.set(it.world, e, Texture, .{ 
+            .image = sample_image.handle, 
+            .memory = sample_image.memory, 
+            .image_view = sampler_image_view.image_view, 
+            .descriptor_sets = sampler_image_view.descriptor_sets,
+            .sampler = texture_sampler 
+        });
+    }
+}
+
+fn destroySimpleTexture(it : *ecs.iter_t) callconv(.C) void {
+    std.debug.print("Shut down: {s}\n", .{ecs.get_name(it.world, it.system).?});
+    const allocator = ecs.singleton_get(it.world, app.Allocator).?;
+    const textures = ecs.field(it, Texture, 1).?;
+    const devices = ecs.field(it, Device, 2).?;
+
+    for (textures, devices) |texture, device| {
+        allocator.alloc.free(texture.descriptor_sets);
+        c.vkDestroySampler(device.logical, texture.sampler, null);
+        c.vkDestroyImageView(device.logical, texture.image_view, null);
+        c.vkDestroyImage(device.logical, texture.image, null);
+        c.vkFreeMemory(device.logical, texture.memory, null);
+    }
+}
 
 pub fn init(world: *ecs.world_t) void {
     ecs.COMPONENT(world, Device);
@@ -617,6 +667,7 @@ pub fn init(world: *ecs.world_t) void {
     ecs.COMPONENT(world, DrawFences);
     ecs.COMPONENT(world, VertexBuffer);
     ecs.COMPONENT(world, IndexBuffer);
+    ecs.COMPONENT(world, Texture);
 
     var device_desc = ecs.system_desc_t{};
     device_desc.callback = createDevice;
@@ -648,6 +699,15 @@ pub fn init(world: *ecs.world_t) void {
     command_buffer_desc.query.filter.terms[2] = .{ .id = ecs.id(BufferCount), .inout = ecs.inout_kind_t.In };
     ecs.SYSTEM(world, "VkStartCommandBufferSystem", ecs.OnStart, &command_buffer_desc);
 
+    var texture_desc = ecs.system_desc_t{};
+    texture_desc.callback = simpleTextureSetUp;
+    texture_desc.query.filter.terms[0] = .{ .id = ecs.id(Device), .inout = ecs.inout_kind_t.In };
+    texture_desc.query.filter.terms[1] = .{ .id = ecs.id(Queue), .inout = ecs.inout_kind_t.In };
+    texture_desc.query.filter.terms[2] = .{ .id = ecs.id(CommandPool), .inout = ecs.inout_kind_t.In };
+    texture_desc.query.filter.terms[3] = .{ .id = ecs.id(DescriptorPool), .inout = ecs.inout_kind_t.In };
+    texture_desc.query.filter.terms[4] = .{ .id = ecs.id(DescriptorSetLayout), .inout = ecs.inout_kind_t.In };
+    ecs.SYSTEM(world, "VkStartTextureSystem", ecs.OnStart, &texture_desc);
+
     var create_mesh_desc = ecs.system_desc_t{};
     create_mesh_desc.callback = createMeshBuffers;
     create_mesh_desc.query.filter.terms[0] = .{ .id = ecs.id(scene.Mesh), .inout = ecs.inout_kind_t.In };
@@ -660,6 +720,12 @@ pub fn init(world: *ecs.world_t) void {
     destroy_mesh_desc.query.filter.terms[1] = .{ .id = ecs.id(IndexBuffer), .inout = ecs.inout_kind_t.In };
     destroy_mesh_desc.query.filter.terms[2] = .{ .id = ecs.id(DeviceEntity), .inout = ecs.inout_kind_t.In };
     ecs.SYSTEM(world, "VkDestroyMeshBufferSystem", ecs.id(app.OnStop), &destroy_mesh_desc);
+    
+    var destroy_texture_desc = ecs.system_desc_t{};
+    destroy_texture_desc.callback = destroySimpleTexture;
+    destroy_texture_desc.query.filter.terms[0] = .{ .id = ecs.id(Texture), .inout = ecs.inout_kind_t.In };
+    destroy_texture_desc.query.filter.terms[1] = .{ .id = ecs.id(Device), .inout = ecs.inout_kind_t.In };
+    ecs.SYSTEM(world, "VkDestroyTextureSystem", ecs.id(app.OnStop), &destroy_texture_desc);
 
     var destroy_command_buffer_desc = ecs.system_desc_t{};
     destroy_command_buffer_desc.callback = destroyCommandBuffers;
