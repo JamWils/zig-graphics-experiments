@@ -4,6 +4,7 @@ const app = @import("../app.zig");
 const c = @import("../clibs.zig");
 const sdl = @import("../sdl.zig");
 const vkc = @import("command.zig");
+const vke = @import("./error.zig");
 const vkd = @import("device.zig");
 const vki = @import("instance.zig");
 const vks = @import("swapchain.zig");
@@ -17,6 +18,7 @@ const scene = @import("scene");
 
 const MAX_OBJECTS = 1000;
 const MAX_FRAME_DRAWS = 3;
+const ONE_SECOND = 1_000_000_000;
 
 const Device = struct {
     instance: c.VkInstance,
@@ -136,7 +138,18 @@ pub const Texture = struct {
     memory: c.VkDeviceMemory,
     image_view: c.VkImageView,
     sampler: c.VkSampler,
-    descriptor_sets: []c.VkDescriptorSet,
+};
+
+pub const SamplerDescriptorSets = struct {
+    sets: []c.VkDescriptorSet,
+};
+
+pub const CurrentFrame = struct {
+    index: u32,
+};
+
+pub const ImageIndex = struct {
+    index: u32,
 };
 
 const vk_alloc_callbacks: ?*c.VkAllocationCallbacks = null;
@@ -305,7 +318,7 @@ fn createRenderPass(it: *ecs.iter_t) callconv(.C) void {
     const images_assets = ecs.field(it, ImageAssets, 6).?;
 
 
-    for (0..it.count()) |i| {
+    for (it.entities(), 0..it.count()) |e, i| {
         const device = devices[i];
         const swapchain = swapchains[i];
         const buffer_count = buffer_counts[i];
@@ -357,7 +370,7 @@ fn createRenderPass(it: *ecs.iter_t) callconv(.C) void {
         const push_constant_range = c.VkPushConstantRange{
             .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT,
             .offset = 0,
-            .size = @sizeOf(scene.UBO),
+            .size = @sizeOf(scene.Transform),
         };
 
         const pipeline = vkp.createGraphicsPipeline(allocator.alloc, .{
@@ -384,13 +397,15 @@ fn createRenderPass(it: *ecs.iter_t) callconv(.C) void {
             return;
         };
 
-        _ = ecs.set(it.world, it.entities()[i], RenderPass, .{ .handle = render_pass.handle });
-        _ = ecs.set(it.world, it.entities()[i], DescriptorSetLayout, .{ .handle = descriptor_set_layout.handle, .sampler_handle = sampler_descriptor_set_layout.handle});
-        _ = ecs.set(it.world, it.entities()[i], UniformBuffers, .{ .buffers = uniform_buffers });
-        _ = ecs.set(it.world, it.entities()[i], DescriptorPool, .{ .handle = descriptor_pool.handle, .sampler_handle = sampler_descriptor_pool.handle});
-        _ = ecs.set(it.world, it.entities()[i], DescriptorSets, .{ .sets = descriptor_sets });
-        _ = ecs.set(it.world, it.entities()[i], Pipeline, .{ .graphics_handle = pipeline.graphics_pipeline_handle, .layout = pipeline.layout });
-        _ = ecs.set(it.world, it.entities()[i], Framebuffers, .{ .handles = swapchain_framebuffers.handles });
+        _ = ecs.set(it.world, e, RenderPass, .{ .handle = render_pass.handle });
+        _ = ecs.set(it.world, e, DescriptorSetLayout, .{ .handle = descriptor_set_layout.handle, .sampler_handle = sampler_descriptor_set_layout.handle});
+        _ = ecs.set(it.world, e, UniformBuffers, .{ .buffers = uniform_buffers });
+        _ = ecs.set(it.world, e, DescriptorPool, .{ .handle = descriptor_pool.handle, .sampler_handle = sampler_descriptor_pool.handle});
+        _ = ecs.set(it.world, e, DescriptorSets, .{ .sets = descriptor_sets });
+        _ = ecs.set(it.world, e, Pipeline, .{ .graphics_handle = pipeline.graphics_pipeline_handle, .layout = pipeline.layout });
+        _ = ecs.set(it.world, e, Framebuffers, .{ .handles = swapchain_framebuffers.handles });
+        _ = ecs.set(it.world, e, CurrentFrame, .{ .index = 0 });
+        _ = ecs.set(it.world, e, ImageIndex, .{ .index = 0 });
     } 
 }
 
@@ -545,8 +560,8 @@ fn createMeshBuffers(it: *ecs.iter_t) callconv(.C) void {
                     return;
                 };
 
-                const buffer_entity = ecs.new_id(it.world);
-                _ = ecs.set(it.world, buffer_entity, VertexBuffer, .{ .buffer = buffer.vertex_buffer, .memory = buffer.vertex_memory, .count = @as(u32, @intCast(mesh.vertices.len)) });
+                // const buffer_entity = ecs.new_id(it.world);
+                _ = ecs.set(it.world, it.entities()[i], VertexBuffer, .{ .buffer = buffer.vertex_buffer, .memory = buffer.vertex_memory, .count = @as(u32, @intCast(mesh.vertices.len)) });
 
                 vkb.createIndexBuffer(mesh.indices, .{
                     .device = device.logical,
@@ -557,8 +572,8 @@ fn createMeshBuffers(it: *ecs.iter_t) callconv(.C) void {
                     std.debug.print("Failed to create index buffer: {}\n", .{err});
                     return;
                 };
-                _ = ecs.set(it.world, buffer_entity, IndexBuffer, .{ .buffer = buffer.index_buffer, .memory = buffer.index_memory, .count = @as(u32, @intCast(mesh.indices.len)) });
-                _ = ecs.set(it.world, buffer_entity, DeviceEntity, .{ .entity = e });
+                _ = ecs.set(it.world, it.entities()[i], IndexBuffer, .{ .buffer = buffer.index_buffer, .memory = buffer.index_memory, .count = @as(u32, @intCast(mesh.indices.len)) });
+                _ = ecs.set(it.world, it.entities()[i], DeviceEntity, .{ .entity = e });
 
                 ecs.remove(it.world, it.entities()[i], scene.UpdateBuffer);
             }
@@ -579,6 +594,8 @@ fn destroyMeshBuffers(it: *ecs.iter_t) callconv(.C) void {
         const device_entity = device_entities[i];
 
         const device = ecs.get(it.world, device_entity.entity, Device).?;
+
+        _ = c.vkDeviceWaitIdle(device.logical);
 
         c.vkDestroyBuffer(device.logical, vertex_buffer.buffer, null);
         c.vkFreeMemory(device.logical, vertex_buffer.memory, null);
@@ -621,9 +638,9 @@ fn simpleTextureSetUp(it: *ecs.iter_t) callconv(.C) void {
             .image = sample_image.handle, 
             .memory = sample_image.memory, 
             .image_view = sampler_image_view.image_view, 
-            .descriptor_sets = sampler_image_view.descriptor_sets,
             .sampler = texture_sampler 
         });
+        _ = ecs.set(it.world, e, SamplerDescriptorSets, .{ .sets = sampler_image_view.descriptor_sets });
     }
 }
 
@@ -631,14 +648,256 @@ fn destroySimpleTexture(it : *ecs.iter_t) callconv(.C) void {
     std.debug.print("Shut down: {s}\n", .{ecs.get_name(it.world, it.system).?});
     const allocator = ecs.singleton_get(it.world, app.Allocator).?;
     const textures = ecs.field(it, Texture, 1).?;
-    const devices = ecs.field(it, Device, 2).?;
+    const sampler_descriptor_sets = ecs.field(it, SamplerDescriptorSets, 2).?;
+    const devices = ecs.field(it, Device, 3).?;
 
-    for (textures, devices) |texture, device| {
-        allocator.alloc.free(texture.descriptor_sets);
+    for (textures, sampler_descriptor_sets, devices) |texture, descriptor, device| {
+        // for (sampler_descriptor_sets) |descriptor_set| {
+        //     c.vkFreeDescriptorSets(device.logical, descriptor_set, 1, &descriptor_set);
+        // }
+        allocator.alloc.free(descriptor.sets);
         c.vkDestroySampler(device.logical, texture.sampler, null);
         c.vkDestroyImageView(device.logical, texture.image_view, null);
         c.vkDestroyImage(device.logical, texture.image, null);
         c.vkFreeMemory(device.logical, texture.memory, null);
+    }
+}
+
+fn assignNextImage(it: *ecs.iter_t) callconv(.C) void {
+    const devices = ecs.field(it, Device, 1).?;
+    const image_available_semaphores = ecs.field(it, ImageAvailableSemaphores, 2).?;
+    const draw_fences = ecs.field(it, DrawFences, 3).?;
+    const swapchains = ecs.field(it, Swapchain, 4).?;
+    const current_frames = ecs.field(it, CurrentFrame, 5).?;
+
+
+    for (0..it.count()) |i| {
+        const device = devices[i];
+        const image_available_semaphore = image_available_semaphores[i];
+        const draw_fence = draw_fences[i];
+        const swapchain = swapchains[i];
+        const current_frame = current_frames[i];
+
+        vke.checkResult(c.vkWaitForFences(device.logical, 1, &draw_fence.handles[current_frame.index], c.VK_TRUE, ONE_SECOND)) catch |err| {
+            std.debug.print("Failed to wait for fence: {}\n", .{err});
+            return;
+        };
+
+        vke.checkResult(c.vkResetFences(device.logical, 1, &draw_fence.handles[current_frame.index])) catch |err| {
+            std.debug.print("Failed to reset draw fence: {}\n", .{err});
+            return;
+        };
+
+        var image_index: u32 = undefined;
+        vke.checkResult(c.vkAcquireNextImageKHR(device.logical, swapchain.handle, ONE_SECOND, image_available_semaphore.handles[current_frame.index], null, &image_index)) catch |err| {
+            std.debug.print("Failed to acquire next image: {}\n", .{err});
+            return;
+        };
+
+        _ = ecs.set(it.world, it.entities()[i], ImageIndex, .{ .index = image_index });
+    }
+}
+
+fn beginCommands(it: *ecs.iter_t) callconv(.C) void {
+    const image_indices = ecs.field(it, ImageIndex, 1).?;
+    const command_buffers = ecs.field(it, CommandBuffers, 2).?;
+    const render_passes = ecs.field(it, RenderPass, 3).?;
+    const swapchains = ecs.field(it, Swapchain, 4).?;
+    const framebuffers = ecs.field(it, Framebuffers, 5).?;
+    const pipelines = ecs.field(it, Pipeline, 6).?;
+
+    for (0..it.count()) |i| {
+        const image_index = image_indices[i];
+        const command_buffer_refs = command_buffers[i];
+        const render_pass = render_passes[i];
+        const swapchain = swapchains[i];
+        const framebuffer_refs = framebuffers[i];
+        const pipeline = pipelines[i];
+
+        const buffer_begin_info = c.VkCommandBufferBeginInfo{ .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
+        const color_clear_value = c.VkClearValue{ .color = .{ .float32 = [_]f32{ 0.3, 0.3, 0.4, 1.0 } } };
+        const depth_clear_value = c.VkClearValue{ .depthStencil = .{ .depth = 1.0, .stencil = 0 } };
+
+        var clear_values: [2]c.VkClearValue = .{
+            color_clear_value,
+            depth_clear_value,
+        };
+
+        var render_pass_begin_info = c.VkRenderPassBeginInfo{ 
+            .sType = c.VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+            .renderPass = render_pass.handle,
+            .renderArea = .{
+                .offset = .{
+                    .x = 0,
+                    .y = 0,
+                },
+                .extent = swapchain.extent,
+            },
+            .clearValueCount = @as(u32, @intCast(clear_values.len)),
+            .pClearValues = &clear_values,
+        };
+
+        const command_buffer = command_buffer_refs.handles[image_index.index];
+        vke.checkResult(c.vkBeginCommandBuffer(command_buffer, &buffer_begin_info)) catch |err| {
+            std.debug.print("Failed to begin command buffer: {}\n", .{err});
+            return;
+        };
+
+        render_pass_begin_info.framebuffer = framebuffer_refs.handles[image_index.index];
+        c.vkCmdBeginRenderPass(command_buffer, &render_pass_begin_info, c.VK_SUBPASS_CONTENTS_INLINE);
+        c.vkCmdBindPipeline(command_buffer, c.VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.graphics_handle);
+    }
+}
+
+fn vertexAndIndexCommands(it: *ecs.iter_t) callconv(.C) void {
+    const vertex_buffers = ecs.field(it, VertexBuffer, 1).?;
+    const index_buffers = ecs.field(it, IndexBuffer, 2).?;
+    const device_entities = ecs.field(it, DeviceEntity, 3).?;
+    const transforms = ecs.field(it, scene.Transform, 4).?;
+
+    // TODO: Separate out the texture index into its own component
+    const meshes = ecs.field(it, scene.Mesh, 5).?;
+
+    for (vertex_buffers, index_buffers, transforms, meshes, device_entities) |vertex_buffer, index_buffer, transform, mesh, device_entity| {
+        const command_buffers = ecs.get(it.world, device_entity.entity, CommandBuffers).?;
+        const image_index = ecs.get(it.world, device_entity.entity, ImageIndex).?;
+        const descriptor_set_refs = ecs.get(it.world, device_entity.entity, DescriptorSets).?;
+        const pipeline = ecs.get(it.world, device_entity.entity, Pipeline).?;
+        const sampler_descriptor_sets = ecs.get(it.world, device_entity.entity, SamplerDescriptorSets).?;
+         
+        const command_buffer = command_buffers.handles[image_index.index];
+
+        const v_buffers = [_]c.VkBuffer{
+            vertex_buffer.buffer,
+        };
+
+        const offsets = [_]c.VkDeviceSize{
+            0,
+        };
+
+        c.vkCmdBindVertexBuffers(command_buffer, 0, 1, &v_buffers, &offsets);
+        c.vkCmdBindIndexBuffer(command_buffer, index_buffer.buffer, 0, c.VK_INDEX_TYPE_UINT32);
+        c.vkCmdPushConstants(command_buffer, pipeline.layout, c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(scene.Transform), &transform.value);
+
+        const descriptor_sets = [_]c.VkDescriptorSet{ descriptor_set_refs.sets[image_index.index], sampler_descriptor_sets.sets[mesh.texture_id] };
+
+        // const dynamic_offset = @as(u32, @intCast(self.model_uniform_alignment * j));
+        // c.vkCmdBindDescriptorSets(command_buffer, c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipeline_layout, 0, 1, &self.descriptor_sets[current_index], 1, &dynamic_offset);
+        c.vkCmdBindDescriptorSets(command_buffer, c.VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.layout, 0, @as(u32, @intCast(descriptor_sets.len)), &descriptor_sets, 0, null);
+        c.vkCmdDrawIndexed(command_buffer, index_buffer.count, 1, 0, 0, 0);
+    }
+}
+
+fn endCommands(it: *ecs.iter_t) callconv(.C) void {
+    const command_buffers = ecs.field(it, CommandBuffers, 1).?;
+    const image_indices = ecs.field(it, ImageIndex, 2).?;
+
+    for (0..it.count()) |i| {
+        const command_buffer_refs = command_buffers[i];
+        const image_index = image_indices[i];
+
+        const command_buffer = command_buffer_refs.handles[image_index.index];
+
+        c.vkCmdEndRenderPass(command_buffer);
+        vke.checkResult(c.vkEndCommandBuffer(command_buffer)) catch |err| {
+            std.debug.print("Failed to end command buffer: {}\n", .{err});
+            return;
+        };
+    }
+}
+
+fn bindCameraMemory(it: *ecs.iter_t) callconv(.C) void {
+    const cameras = ecs.field(it, scene.Camera, 1).?;
+
+    var device_query_desc = ecs.filter_desc_t{};
+    device_query_desc.terms[0] = .{ .id = ecs.id(Device), .inout = ecs.inout_kind_t.In };
+    device_query_desc.terms[1] = .{ .id = ecs.id(ImageIndex), .inout = ecs.inout_kind_t.In };
+    device_query_desc.terms[2] = .{ .id = ecs.id(UniformBuffers), .inout = ecs.inout_kind_t.In };
+
+    const filter = ecs.filter_init(it.world, &device_query_desc) catch |err| {
+        std.debug.print("Failed to create device query: {}\n", .{err});
+        return;
+    };
+    defer ecs.filter_fini(filter);
+
+    var query_iter = ecs.filter_iter(it.world, filter);
+    while (ecs.filter_next(&query_iter)) {
+        for(query_iter.entities()) |e| {
+            const device = ecs.get(query_iter.world, e, Device).?;
+            const image_index = ecs.get(query_iter.world, e, ImageIndex).?;
+            const uniform_buffers = ecs.get(query_iter.world, e, UniformBuffers).?;
+
+            for (0..it.count()) |i| {
+                const camera_buffer = uniform_buffers.buffers[image_index.index].camera;
+                var data: ?*align(@alignOf(u32)) anyopaque = undefined;
+                vke.checkResult(c.vkMapMemory(device.logical, camera_buffer.memory, 0, @sizeOf(scene.Camera), 0, &data)) catch |err| {
+                    std.debug.print("Failed to map camera memory: {}\n", .{err});
+                    return;
+                };
+
+                const camera = cameras[i];
+                @memcpy(@as([*]u8, @ptrCast(data)), std.mem.asBytes(&camera));
+                c.vkUnmapMemory(device.logical, camera_buffer.memory);
+            }
+        }
+    }
+}
+
+fn draw(it: *ecs.iter_t) callconv(.C) void {
+    const command_buffers = ecs.field(it, CommandBuffers, 1).?;
+    const image_available_semaphores = ecs.field(it, ImageAvailableSemaphores, 2).?;
+    const render_finished_semaphores = ecs.field(it, RenderFinishedSemaphores, 3).?;
+    const draw_fences = ecs.field(it, DrawFences, 4).?;
+    const image_indices = ecs.field(it, ImageIndex, 5).?;
+    const swapchains = ecs.field(it, Swapchain, 6).?;
+    const queues = ecs.field(it, Queue, 7).?;
+    const current_frames = ecs.field(it, CurrentFrame, 8).?;
+
+    for (0..it.count()) |i| {
+        const command_buffer_refs = command_buffers[i];
+        const image_available_semaphore = image_available_semaphores[i];
+        const render_finished_semaphore = render_finished_semaphores[i];
+        const draw_fence = draw_fences[i];
+        const image_index = image_indices[i];
+        const swapchain = swapchains[i];
+        const queue = queues[i];
+        const current_frame = current_frames[i];
+
+        const wait_stages: [1]c.VkPipelineStageFlags = .{
+            c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        };
+
+        const submit_info = c.VkSubmitInfo{
+            .sType = c.VK_STRUCTURE_TYPE_SUBMIT_INFO,
+            .waitSemaphoreCount = 1,
+            .pWaitSemaphores = &image_available_semaphore.handles[current_frame.index],
+            .pWaitDstStageMask = &wait_stages,
+            .commandBufferCount = 1,
+            .pCommandBuffers = &command_buffer_refs.handles[image_index.index],
+            .signalSemaphoreCount = 1,
+            .pSignalSemaphores = &render_finished_semaphore.handles[current_frame.index],
+        };
+
+        vke.checkResult(c.vkQueueSubmit(queue.graphics, 1, &submit_info, draw_fence.handles[current_frame.index])) catch |err| {
+            std.debug.print("Failed to submit queue: {}\n", .{err});
+            return;
+        };
+
+        const present_info = c.VkPresentInfoKHR{
+            .sType = c.VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+            .waitSemaphoreCount = 1,
+            .pWaitSemaphores = &render_finished_semaphore.handles[current_frame.index],
+            .swapchainCount = 1,
+            .pSwapchains = &swapchain.handle,
+            .pImageIndices = &image_index.index,
+        };
+
+        vke.checkResult(c.vkQueuePresentKHR(queue.presentation, &present_info)) catch |err| {
+            std.debug.print("Failed to present queue: {}\n", .{err});
+            return;
+        };
+
+        _ = ecs.set(it.world, it.entities()[i], CurrentFrame, .{ .index = (current_frame.index + 1) % MAX_FRAME_DRAWS });
     }
 }
 
@@ -668,6 +927,9 @@ pub fn init(world: *ecs.world_t) void {
     ecs.COMPONENT(world, VertexBuffer);
     ecs.COMPONENT(world, IndexBuffer);
     ecs.COMPONENT(world, Texture);
+    ecs.COMPONENT(world, SamplerDescriptorSets);
+    ecs.COMPONENT(world, CurrentFrame);
+    ecs.COMPONENT(world, ImageIndex);
 
     var device_desc = ecs.system_desc_t{};
     device_desc.callback = createDevice;
@@ -714,6 +976,65 @@ pub fn init(world: *ecs.world_t) void {
     create_mesh_desc.query.filter.terms[1] = .{ .id = ecs.id(scene.UpdateBuffer), .inout = ecs.inout_kind_t.In };
     ecs.SYSTEM(world, "VkCreateMeshBufferSystem", ecs.OnUpdate, &create_mesh_desc);
 
+    var assign_image_desc = ecs.system_desc_t{};
+    assign_image_desc.callback = assignNextImage;
+    assign_image_desc.query.filter.terms[0] = .{ .id = ecs.id(Device), .inout = ecs.inout_kind_t.In };
+    assign_image_desc.query.filter.terms[1] = .{ .id = ecs.id(ImageAvailableSemaphores), .inout = ecs.inout_kind_t.In };
+    assign_image_desc.query.filter.terms[2] = .{ .id = ecs.id(DrawFences), .inout = ecs.inout_kind_t.In };
+    assign_image_desc.query.filter.terms[3] = .{ .id = ecs.id(Swapchain), .inout = ecs.inout_kind_t.In };
+    assign_image_desc.query.filter.terms[4] = .{ .id = ecs.id(CurrentFrame), .inout = ecs.inout_kind_t.In };
+    assign_image_desc.query.filter.terms[5] = .{ 
+        .id = ecs.id(ImageIndex), 
+        .inout = ecs.inout_kind_t.Out,
+        .flags = ecs.IsEntity,
+        .src = .{
+            .id = 0,
+        }
+    };
+    ecs.SYSTEM(world, "VkAssignImageSystem", ecs.OnStore, &assign_image_desc);
+
+    var begin_commands_desc = ecs.system_desc_t{};
+    begin_commands_desc.callback = beginCommands;
+    begin_commands_desc.query.filter.terms[0] = .{ .id = ecs.id(ImageIndex), .inout = ecs.inout_kind_t.In };
+    begin_commands_desc.query.filter.terms[1] = .{ .id = ecs.id(CommandBuffers), .inout = ecs.inout_kind_t.In };
+    begin_commands_desc.query.filter.terms[2] = .{ .id = ecs.id(RenderPass), .inout = ecs.inout_kind_t.In };
+    begin_commands_desc.query.filter.terms[3] = .{ .id = ecs.id(Swapchain), .inout = ecs.inout_kind_t.In };
+    begin_commands_desc.query.filter.terms[4] = .{ .id = ecs.id(Framebuffers), .inout = ecs.inout_kind_t.In };
+    begin_commands_desc.query.filter.terms[5] = .{ .id = ecs.id(Pipeline), .inout = ecs.inout_kind_t.In };
+    ecs.SYSTEM(world, "VkBeginCommandsSystem", ecs.OnStore, &begin_commands_desc);
+
+    var vertex_index_desc = ecs.system_desc_t{};
+    vertex_index_desc.callback = vertexAndIndexCommands;
+    vertex_index_desc.query.filter.terms[0] = .{ .id = ecs.id(VertexBuffer), .inout = ecs.inout_kind_t.In };
+    vertex_index_desc.query.filter.terms[1] = .{ .id = ecs.id(IndexBuffer), .inout = ecs.inout_kind_t.In };
+    vertex_index_desc.query.filter.terms[2] = .{ .id = ecs.id(DeviceEntity), .inout = ecs.inout_kind_t.In };
+    vertex_index_desc.query.filter.terms[3] = .{ .id = ecs.id(scene.Transform), .inout = ecs.inout_kind_t.In };
+    vertex_index_desc.query.filter.terms[4] = .{ .id = ecs.id(scene.Mesh), .inout = ecs.inout_kind_t.In };
+    ecs.SYSTEM(world, "VkVertexIndexCommandsSystem", ecs.OnStore, &vertex_index_desc);
+
+    var end_commands_desc = ecs.system_desc_t{};
+    end_commands_desc.callback = endCommands;
+    end_commands_desc.query.filter.terms[0] = .{ .id = ecs.id(CommandBuffers), .inout = ecs.inout_kind_t.In };
+    end_commands_desc.query.filter.terms[1] = .{ .id = ecs.id(ImageIndex), .inout = ecs.inout_kind_t.In };
+    ecs.SYSTEM(world, "VkEndCommandsSystem", ecs.OnStore, &end_commands_desc);
+
+    var bind_camera_desc = ecs.system_desc_t{};
+    bind_camera_desc.callback = bindCameraMemory;
+    bind_camera_desc.query.filter.terms[0] = .{ .id = ecs.id(scene.Camera), .inout = ecs.inout_kind_t.In };
+    ecs.SYSTEM(world, "VkBindCameraMemorySystem", ecs.OnStore, &bind_camera_desc);
+
+    var draw_desc = ecs.system_desc_t{};
+    draw_desc.callback = draw;
+    draw_desc.query.filter.terms[0] = .{ .id = ecs.id(CommandBuffers), .inout = ecs.inout_kind_t.In };
+    draw_desc.query.filter.terms[1] = .{ .id = ecs.id(ImageAvailableSemaphores), .inout = ecs.inout_kind_t.In };
+    draw_desc.query.filter.terms[2] = .{ .id = ecs.id(RenderFinishedSemaphores), .inout = ecs.inout_kind_t.In };
+    draw_desc.query.filter.terms[3] = .{ .id = ecs.id(DrawFences), .inout = ecs.inout_kind_t.In };
+    draw_desc.query.filter.terms[4] = .{ .id = ecs.id(ImageIndex), .inout = ecs.inout_kind_t.In };
+    draw_desc.query.filter.terms[5] = .{ .id = ecs.id(Swapchain), .inout = ecs.inout_kind_t.In };
+    draw_desc.query.filter.terms[6] = .{ .id = ecs.id(Queue), .inout = ecs.inout_kind_t.In };
+    draw_desc.query.filter.terms[7] = .{ .id = ecs.id(CurrentFrame), .inout = ecs.inout_kind_t.InOut };
+    ecs.SYSTEM(world, "VkDrawSystem", ecs.OnStore, &draw_desc);
+
     var destroy_mesh_desc = ecs.system_desc_t{};
     destroy_mesh_desc.callback = destroyMeshBuffers;
     destroy_mesh_desc.query.filter.terms[0] = .{ .id = ecs.id(VertexBuffer), .inout = ecs.inout_kind_t.In };
@@ -724,7 +1045,8 @@ pub fn init(world: *ecs.world_t) void {
     var destroy_texture_desc = ecs.system_desc_t{};
     destroy_texture_desc.callback = destroySimpleTexture;
     destroy_texture_desc.query.filter.terms[0] = .{ .id = ecs.id(Texture), .inout = ecs.inout_kind_t.In };
-    destroy_texture_desc.query.filter.terms[1] = .{ .id = ecs.id(Device), .inout = ecs.inout_kind_t.In };
+    destroy_texture_desc.query.filter.terms[1] = .{ .id = ecs.id(SamplerDescriptorSets), .inout = ecs.inout_kind_t.In };
+    destroy_texture_desc.query.filter.terms[2] = .{ .id = ecs.id(Device), .inout = ecs.inout_kind_t.In };
     ecs.SYSTEM(world, "VkDestroyTextureSystem", ecs.id(app.OnStop), &destroy_texture_desc);
 
     var destroy_command_buffer_desc = ecs.system_desc_t{};

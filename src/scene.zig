@@ -75,21 +75,17 @@ fn simpleSceneSetUp(it: *ecs.iter_t) callconv(.C) void {
         .indices = allocator.alloc.dupe(u32, indices[0..]) catch @panic("Out of memory"),
         .texture_id = 0,
     };
-    defer allocator.alloc.free(first_mesh.vertices);
-    defer allocator.alloc.free(first_mesh.indices);
 
     const second_mesh = scene.Mesh{
         .vertices = allocator.alloc.dupe(scene.Vertex, vertices_two[0..]) catch @panic("Out of memory"),
         .indices = allocator.alloc.dupe(u32, indices[0..]) catch @panic("Out of memory"),
         .texture_id = 0,
     };
-    defer allocator.alloc.free(second_mesh.vertices);
-    defer allocator.alloc.free(second_mesh.indices);
 
     const entity = ecs.new_id(it.world);
     _ = ecs.add(it.world, entity, scene.UpdateBuffer);
     _ = ecs.set(it.world, entity, scene.Mesh, first_mesh);
-    _ = ecs.set(it.world, entity, scene.Speed, scene.Speed{.value = 1});
+    _ = ecs.set(it.world, entity, scene.Speed, scene.Speed{.value = 20});
 
     var t1 = zmath.identity();
     t1 = zmath.mul(zmath.translationV(.{0, 0, -2.5, 1}), t1);
@@ -100,7 +96,7 @@ fn simpleSceneSetUp(it: *ecs.iter_t) callconv(.C) void {
     const entity2 = ecs.new_id(it.world);
     _ = ecs.add(it.world, entity2, scene.UpdateBuffer);
     _ = ecs.set(it.world, entity2, scene.Mesh, second_mesh);
-    _ = ecs.set(it.world, entity2, scene.Speed, scene.Speed{.value = 20});
+    _ = ecs.set(it.world, entity2, scene.Speed, scene.Speed{.value = 50});
 
     var t2 = zmath.identity();
     t2 = zmath.mul(zmath.translationV(.{0, 0, -3, 1}), t2);
@@ -109,7 +105,19 @@ fn simpleSceneSetUp(it: *ecs.iter_t) callconv(.C) void {
     });
 }
 
+fn cleanUpMeshAllocations(it: *ecs.iter_t) callconv(.C) void {
+    std.debug.print("Clean up: {s}\n", .{ecs.get_name(it.world, it.system).?});
+    const allocator = ecs.singleton_get(it.world, app.Allocator).?;
+    const meshes = ecs.field(it, scene.Mesh, 1).?;
+
+    for (meshes) |mesh| {
+        allocator.alloc.free(mesh.vertices);
+        allocator.alloc.free(mesh.indices);
+    }
+}
+
 fn spinTransform(it: *ecs.iter_t) callconv(.C) void {
+    // std.debug.print("Update: {s}\n", .{ecs.get_name(it.world, it.system).?});
     const transforms = ecs.field(it, scene.Transform, 1).?;
     const speeds = ecs.field(it, scene.Speed, 2).?;
 
@@ -147,4 +155,9 @@ pub fn init(world: *ecs.world_t) void {
     spin_transform_desc.query.filter.terms[0] = .{ .id = ecs.id(scene.Transform), .inout = ecs.inout_kind_t.InOut, };
     spin_transform_desc.query.filter.terms[1] = .{ .id = ecs.id(scene.Speed), .inout = ecs.inout_kind_t.In, };
     ecs.SYSTEM(world, "SpinTransform", ecs.OnUpdate, &spin_transform_desc);
+
+    var clean_up_mesh_allocations_desc = ecs.system_desc_t{};
+    clean_up_mesh_allocations_desc.callback = cleanUpMeshAllocations;
+    clean_up_mesh_allocations_desc.query.filter.terms[0] = .{ .id = ecs.id(scene.Mesh), .inout = ecs.inout_kind_t.InOut, };
+    ecs.SYSTEM(world, "CleanUpMeshAllocations", ecs.id(app.OnStop), &clean_up_mesh_allocations_desc);
 }
