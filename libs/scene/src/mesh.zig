@@ -21,3 +21,4 @@ pub const Transform = struct {
     value: zmath.Mat
 };
 
+pub const UpdateBuffer = struct {};

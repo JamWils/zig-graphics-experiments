@@ -18,10 +18,10 @@ pub fn init(world: *ecs.world_t, allocator: std.mem.Allocator) void {
     ecs.TAG(world, OnStop);
     ecs.COMPONENT(world, Allocator);
     ecs.COMPONENT(world, CanvasSize);
-    // const on_stop = ecs.new_w_id(world, ecs.id(OnStop));
     ecs.add_pair(world, ecs.id(OnStop), ecs.DependsOn, ecs.OnStore);
 
     _ = ecs.singleton_set(world, Allocator, Allocator{ .alloc = allocator });
+    _ = ecs.singleton_set(world, CanvasSize, .{ .width = 800, .height = 600 });
 }
 
 pub fn run(world: *ecs.world_t) void {

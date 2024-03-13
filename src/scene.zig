@@ -100,12 +100,14 @@ fn simpleSceneSetUp(it: *ecs.iter_t) callconv(.C) void {
     defer allocator.alloc.free(second_mesh.indices);
 
     const entity = ecs.new_id(it.world);
+    _ = ecs.add(it.world, entity, scene.UpdateBuffer);
     _ = ecs.set(it.world, entity, scene.Mesh, first_mesh);
     _ = ecs.set(it.world, entity, scene.Transform, scene.Transform{
         .value = zmath.identity(),
     });
 
     const entity2 = ecs.new_id(it.world);
+    _ = ecs.add(it.world, entity2, scene.UpdateBuffer);
     _ = ecs.set(it.world, entity2, scene.Mesh, second_mesh);
     _ = ecs.set(it.world, entity2, scene.Transform, scene.Transform{
         .value = zmath.identity(),
@@ -116,10 +118,19 @@ pub fn init(world: *ecs.world_t) void {
     ecs.COMPONENT(world, scene.Camera);
     ecs.COMPONENT(world, scene.Mesh);
     ecs.COMPONENT(world, scene.Transform);
+    ecs.TAG(world, scene.UpdateBuffer);
 
     var simple_scene_desc = ecs.system_desc_t{};
     simple_scene_desc.callback = simpleSceneSetUp;
-    simple_scene_desc.query.filter.terms[0] = .{ .id = ecs.id(app.Allocator), .inout = ecs.inout_kind_t.In };
-    simple_scene_desc.query.filter.terms[1] = .{ .id = ecs.id(app.CanvasSize), .inout = ecs.inout_kind_t.In };
+    simple_scene_desc.query.filter.terms[0] = .{ 
+        .id = ecs.id(app.Allocator),
+        .src = .{ .id = ecs.id(app.Allocator) },
+    };
+    simple_scene_desc.query.filter.terms[1] = .{ 
+        .id = ecs.id(app.CanvasSize), 
+        .src = .{
+            .id = ecs.id(app.CanvasSize), 
+        },
+    };
     ecs.SYSTEM(world, "SimpleSceneSetUp", ecs.OnStart, &simple_scene_desc);
 }

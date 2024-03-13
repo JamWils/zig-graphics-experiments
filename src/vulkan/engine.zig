@@ -25,12 +25,21 @@ const Device = struct {
     debug_messenger: c.VkDebugUtilsMessengerEXT
 };
 
+const DeviceEntity = struct {
+    entity: ecs.entity_t,
+};
+
 const BufferOffset = struct {
     alignment: u64,
 };
 
 const Surface = struct {
     handle: c.VkSurfaceKHR,
+};
+
+const Queue = struct {
+    graphics: c.VkQueue,
+    presentation: c.VkQueue,
 };
 
 const QueueIndex = struct {
@@ -110,6 +119,18 @@ pub const DrawFences = struct {
     handles: []c.VkFence,
 };
 
+pub const VertexBuffer = struct {
+    buffer: c.VkBuffer,
+    memory: c.VkDeviceMemory,
+    count: u32,
+};
+
+pub const IndexBuffer = struct {
+    buffer: c.VkBuffer,
+    memory: c.VkDeviceMemory,
+    count: u32,
+};
+
 const vk_alloc_callbacks: ?*c.VkAllocationCallbacks = null;
 
 /// Create the device and its associated surface
@@ -153,6 +174,10 @@ fn createDevice(it: *ecs.iter_t) callconv(.C) void {
         _ = ecs.set(it.world, new_entity, QueueIndex, .{ 
             .graphics = physical_device.queue_indices.graphics_queue_location,
             .presentation = physical_device.queue_indices.presentation_queue_location,
+        });
+        _ = ecs.set(it.world, new_entity, Queue, .{ 
+            .graphics = device.graphics_queue,
+            .presentation = device.presentation_queue,
         });
     }
 }
@@ -270,7 +295,6 @@ fn createRenderPass(it: *ecs.iter_t) callconv(.C) void {
     const buffer_offsets = ecs.field(it, BufferOffset, 4).?;
     const depth_images = ecs.field(it, DepthImage, 5).?;
     const images_assets = ecs.field(it, ImageAssets, 6).?;
-    // const queue = ecs.field(it, QueueIndex, 4).?;
 
 
     for (0..it.count()) |i| {
@@ -280,7 +304,6 @@ fn createRenderPass(it: *ecs.iter_t) callconv(.C) void {
         const buffer_offset = buffer_offsets[i];
         const depth_image = depth_images[i];
         const image_assets = images_assets[i];
-        // const queue_index = queue[i];
 
         const render_pass = vkr.createRenderPass(device.physical, device.logical, swapchain.format) catch |err| {
             std.debug.print("Failed to create render pass: {}\n", .{err});
@@ -480,9 +503,87 @@ fn destroyCommandBuffers(it: *ecs.iter_t) callconv(.C) void {
     }
 }
 
+// Create a new system that will add a mesh and vertex buffer to the vulkan system, this is looking for a scene.Mesh component and a scene.UpdateBuffer tag
+fn createMeshBuffers(it: *ecs.iter_t) callconv(.C) void {
+    std.debug.print("Update Mesh System: {s}\n", .{ecs.get_name(it.world, it.system).?});
+    const meshes = ecs.field(it, scene.Mesh, 1).?;
+
+    var device_query_desc = ecs.filter_desc_t{};
+    device_query_desc.terms[0] = .{ .id = ecs.id(Device), .inout = ecs.inout_kind_t.In };
+    device_query_desc.terms[1] = .{ .id = ecs.id(Queue), .inout = ecs.inout_kind_t.In };
+    device_query_desc.terms[2] = .{ .id = ecs.id(CommandPool), .inout = ecs.inout_kind_t.In };
+    const filter = ecs.filter_init(it.world, &device_query_desc) catch |err| {
+        std.debug.print("Failed to create device query: {}\n", .{err});
+        return;
+    };
+    defer ecs.filter_fini(filter);
+
+    var query_iter = ecs.filter_iter(it.world, filter);
+    while (ecs.filter_next(&query_iter)) {
+        for(query_iter.entities()) |e| {
+            const device = ecs.get(query_iter.world, e, Device).?;
+            const queue = ecs.get(query_iter.world, e, Queue).?;
+            const command_pool = ecs.get(query_iter.world, e, CommandPool).?;
+
+            for (0..it.count()) |i| {
+                const mesh = meshes[i];
+                var buffer = vkb.createVertexBuffer(mesh.vertices, .{
+                    .device = device.logical,
+                    .physical_device = device.physical,
+                    .transfer_queue = queue.graphics,
+                    .transfer_command_pool = command_pool.handle
+                }) catch |err| {
+                    std.debug.print("Failed to create vertex buffer: {}\n", .{err});
+                    return;
+                };
+
+                const buffer_entity = ecs.new_id(it.world);
+                _ = ecs.set(it.world, buffer_entity, VertexBuffer, .{ .buffer = buffer.vertex_buffer, .memory = buffer.vertex_memory, .count = @as(u32, @intCast(mesh.vertices.len)) });
+
+                vkb.createIndexBuffer(mesh.indices, .{
+                    .device = device.logical,
+                    .physical_device = device.physical,
+                    .transfer_queue = queue.graphics,
+                    .transfer_command_pool = command_pool.handle
+                }, &buffer) catch |err| {
+                    std.debug.print("Failed to create index buffer: {}\n", .{err});
+                    return;
+                };
+                _ = ecs.set(it.world, buffer_entity, IndexBuffer, .{ .buffer = buffer.index_buffer, .memory = buffer.index_memory, .count = @as(u32, @intCast(mesh.indices.len)) });
+                _ = ecs.set(it.world, buffer_entity, DeviceEntity, .{ .entity = e });
+
+                ecs.remove(it.world, it.entities()[i], scene.UpdateBuffer);
+            }
+
+        }
+    }   
+}
+
+fn destroyMeshBuffers(it: *ecs.iter_t) callconv(.C) void {
+    std.debug.print("Shut down: {s}\n", .{ecs.get_name(it.world, it.system).?});
+    const vertex_buffers = ecs.field(it, VertexBuffer, 1).?;
+    const index_buffers = ecs.field(it, IndexBuffer, 2).?;
+    const device_entities = ecs.field(it, DeviceEntity, 3).?;
+
+    for (0..it.count()) |i| {
+        const vertex_buffer = vertex_buffers[i];
+        const index_buffer = index_buffers[i];
+        const device_entity = device_entities[i];
+
+        const device = ecs.get(it.world, device_entity.entity, Device).?;
+
+        c.vkDestroyBuffer(device.logical, vertex_buffer.buffer, null);
+        c.vkFreeMemory(device.logical, vertex_buffer.memory, null);
+        c.vkDestroyBuffer(device.logical, index_buffer.buffer, null);
+        c.vkFreeMemory(device.logical, index_buffer.memory, null);
+    }
+}
+
 pub fn init(world: *ecs.world_t) void {
     ecs.COMPONENT(world, Device);
+    ecs.COMPONENT(world, DeviceEntity);
     ecs.COMPONENT(world, Surface);
+    ecs.COMPONENT(world, Queue);
     ecs.COMPONENT(world, QueueIndex);
     ecs.COMPONENT(world, Swapchain);
     ecs.COMPONENT(world, ImageAssets);
@@ -501,6 +602,8 @@ pub fn init(world: *ecs.world_t) void {
     ecs.COMPONENT(world, ImageAvailableSemaphores);
     ecs.COMPONENT(world, RenderFinishedSemaphores);
     ecs.COMPONENT(world, DrawFences);
+    ecs.COMPONENT(world, VertexBuffer);
+    ecs.COMPONENT(world, IndexBuffer);
 
     var device_desc = ecs.system_desc_t{};
     device_desc.callback = createDevice;
@@ -531,6 +634,19 @@ pub fn init(world: *ecs.world_t) void {
     command_buffer_desc.query.filter.terms[1] = .{ .id = ecs.id(QueueIndex), .inout = ecs.inout_kind_t.In };
     command_buffer_desc.query.filter.terms[2] = .{ .id = ecs.id(BufferCount), .inout = ecs.inout_kind_t.In };
     ecs.SYSTEM(world, "VkStartCommandBufferSystem", ecs.OnStart, &command_buffer_desc);
+
+    var create_mesh_desc = ecs.system_desc_t{};
+    create_mesh_desc.callback = createMeshBuffers;
+    create_mesh_desc.query.filter.terms[0] = .{ .id = ecs.id(scene.Mesh), .inout = ecs.inout_kind_t.In };
+    create_mesh_desc.query.filter.terms[1] = .{ .id = ecs.id(scene.UpdateBuffer), .inout = ecs.inout_kind_t.In };
+    ecs.SYSTEM(world, "VkCreateMeshBufferSystem", ecs.OnUpdate, &create_mesh_desc);
+
+    var destroy_mesh_desc = ecs.system_desc_t{};
+    destroy_mesh_desc.callback = destroyMeshBuffers;
+    destroy_mesh_desc.query.filter.terms[0] = .{ .id = ecs.id(VertexBuffer), .inout = ecs.inout_kind_t.In };
+    destroy_mesh_desc.query.filter.terms[1] = .{ .id = ecs.id(IndexBuffer), .inout = ecs.inout_kind_t.In };
+    destroy_mesh_desc.query.filter.terms[2] = .{ .id = ecs.id(DeviceEntity), .inout = ecs.inout_kind_t.In };
+    ecs.SYSTEM(world, "VkDestroyMeshBufferSystem", ecs.id(app.OnStop), &destroy_mesh_desc);
 
     var destroy_command_buffer_desc = ecs.system_desc_t{};
     destroy_command_buffer_desc.callback = destroyCommandBuffers;
