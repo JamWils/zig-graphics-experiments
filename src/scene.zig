@@ -117,7 +117,6 @@ fn cleanUpMeshAllocations(it: *ecs.iter_t) callconv(.C) void {
 }
 
 fn spinTransform(it: *ecs.iter_t) callconv(.C) void {
-    // std.debug.print("Update: {s}\n", .{ecs.get_name(it.world, it.system).?});
     const transforms = ecs.field(it, scene.Transform, 1).?;
     const speeds = ecs.field(it, scene.Speed, 2).?;
 
