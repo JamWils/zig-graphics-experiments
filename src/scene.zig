@@ -4,19 +4,6 @@ const scene = @import("scene");
 const zmath = @import("zmath");
 const app = @import("app.zig");
 
-// fn simpleTextureSetUp(it: *ecs.iter_t) callconv(.C) void {
-//     std.debug.print("Start up: {s}\n", .{ecs.get_name(it.world, it.system).?});
-
-//     const sample_image = try vkt.loadImageFromFile("assets/sample_floor.png", .{
-//         .physical_device = physical_device.handle,
-//         .device = device.handle,
-//         .transfer_queue = device.graphics_queue,
-//         .command_pool = graphics_command_pool.handle,
-//     });
-//     const texture_sampler = try vkt.createTextureSampler(device.handle);
-//     const sampler_image_view = try vkt.createTextureImageView(alloc, device.handle, sample_image.handle, sampler_descriptor_pool.handle, sampler_descriptor_set_layout.handle, texture_sampler);
-// }
-
 fn simpleSceneSetUp(it: *ecs.iter_t) callconv(.C) void {
     std.debug.print("Start up: {s}\n", .{ecs.get_name(it.world, it.system).?});
     const allocator = ecs.singleton_get(it.world, app.Allocator).?;
@@ -102,22 +89,43 @@ fn simpleSceneSetUp(it: *ecs.iter_t) callconv(.C) void {
     const entity = ecs.new_id(it.world);
     _ = ecs.add(it.world, entity, scene.UpdateBuffer);
     _ = ecs.set(it.world, entity, scene.Mesh, first_mesh);
+    _ = ecs.set(it.world, entity, scene.Speed, scene.Speed{.value = 1});
+
+    var t1 = zmath.identity();
+    t1 = zmath.mul(zmath.translationV(.{0, 0, -2.5, 1}), t1);
     _ = ecs.set(it.world, entity, scene.Transform, scene.Transform{
-        .value = zmath.identity(),
+        .value = t1,
     });
 
     const entity2 = ecs.new_id(it.world);
     _ = ecs.add(it.world, entity2, scene.UpdateBuffer);
     _ = ecs.set(it.world, entity2, scene.Mesh, second_mesh);
+    _ = ecs.set(it.world, entity2, scene.Speed, scene.Speed{.value = 20});
+
+    var t2 = zmath.identity();
+    t2 = zmath.mul(zmath.translationV(.{0, 0, -3, 1}), t2);
     _ = ecs.set(it.world, entity2, scene.Transform, scene.Transform{
-        .value = zmath.identity(),
+        .value = t2,
     });
+}
+
+fn spinTransform(it: *ecs.iter_t) callconv(.C) void {
+    const transforms = ecs.field(it, scene.Transform, 1).?;
+    const speeds = ecs.field(it, scene.Speed, 2).?;
+
+    for (transforms, speeds, it.entities()) |transform, speed, e| {
+        const newValue = zmath.mul(zmath.rotationZ(std.math.degreesToRadians(f32, it.delta_time * speed.value)), transform.value);
+        _ = ecs.set(it.world, e, scene.Transform, .{
+            .value = newValue,
+        });
+    }
 }
 
 pub fn init(world: *ecs.world_t) void {
     ecs.COMPONENT(world, scene.Camera);
     ecs.COMPONENT(world, scene.Mesh);
     ecs.COMPONENT(world, scene.Transform);
+    ecs.COMPONENT(world, scene.Speed);
     ecs.TAG(world, scene.UpdateBuffer);
 
     var simple_scene_desc = ecs.system_desc_t{};
@@ -133,4 +141,10 @@ pub fn init(world: *ecs.world_t) void {
         },
     };
     ecs.SYSTEM(world, "SimpleSceneSetUp", ecs.OnStart, &simple_scene_desc);
+
+    var spin_transform_desc = ecs.system_desc_t{};
+    spin_transform_desc.callback = spinTransform;
+    spin_transform_desc.query.filter.terms[0] = .{ .id = ecs.id(scene.Transform), .inout = ecs.inout_kind_t.InOut, };
+    spin_transform_desc.query.filter.terms[1] = .{ .id = ecs.id(scene.Speed), .inout = ecs.inout_kind_t.In, };
+    ecs.SYSTEM(world, "SpinTransform", ecs.OnUpdate, &spin_transform_desc);
 }

@@ -579,6 +579,19 @@ fn destroyMeshBuffers(it: *ecs.iter_t) callconv(.C) void {
     }
 }
 
+// fn simpleTextureSetUp(it: *ecs.iter_t) callconv(.C) void {
+//     std.debug.print("Start up: {s}\n", .{ecs.get_name(it.world, it.system).?});
+
+//     const sample_image = try vkt.loadImageFromFile("assets/sample_floor.png", .{
+//         .physical_device = physical_device.handle,
+//         .device = device.handle,
+//         .transfer_queue = device.graphics_queue,
+//         .command_pool = graphics_command_pool.handle,
+//     });
+//     const texture_sampler = try vkt.createTextureSampler(device.handle);
+//     const sampler_image_view = try vkt.createTextureImageView(alloc, device.handle, sample_image.handle, sampler_descriptor_pool.handle, sampler_descriptor_set_layout.handle, texture_sampler);
+// }
+
 pub fn init(world: *ecs.world_t) void {
     ecs.COMPONENT(world, Device);
     ecs.COMPONENT(world, DeviceEntity);
