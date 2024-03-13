@@ -1,12 +1,11 @@
 const std = @import("std");
 const ecs = @import("flecs");
 const app = @import("app.zig");
-const eng = @import("./vulkan/engine.zig");
+const vulkan_eng = @import("./vulkan/engine.zig");
 const scene = @import("scene.zig");
 const sdl = @import("sdl.zig");
 const testing = std.testing;
 const builtin = @import("builtin");
-const VulkanEngine = @import("vulkan_engine.zig");
 const MetalEngine = @import("metal_engine.zig");
 
 pub fn main() !void {
@@ -23,14 +22,7 @@ pub fn main() !void {
     scene.init(world);
 
     if (builtin.os.tag == .windows) {
-        eng.init(world);
-
-        // var engine = VulkanEngine.init(gpa.allocator()) catch |err| {
-        //     std.debug.print("Unable to create vulkan engine: {}\n", .{err});
-        //     @panic("Unable to create vulkan engine");
-        // };
-        // defer engine.cleanup();
-        // try engine.run();
+        vulkan_eng.init(world);
     } else if (builtin.os.tag == .macos) {
         // std.debug.print("MacOS verision at least 14: {}\n", .{macosVersionAtLeast(15, 0, 0)});
         var engine = MetalEngine.init(gpa.allocator()) catch |err| {
