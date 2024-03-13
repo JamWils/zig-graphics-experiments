@@ -2703,3 +2703,31 @@ pub const EcsRest = extern struct {
     ipaddr: ?[*:0]u8 = null,
     impl: ?*anyopaque = null,
 };
+
+//--------------------------------------------------------------------------------------------------
+//
+// FLECS_SINGLETON
+//
+//--------------------------------------------------------------------------------------------------
+
+pub fn singleton_add(world: *world_t, comptime T: type) void {
+    add(world, id(T), id(T));
+}
+
+pub fn singleton_remove(world: *world_t, comptime T: type) void {
+    remove(world, id(T), id(T));
+}
+
+pub fn singleton_set(world: *world_t, comptime T: type, val: T) entity_t {
+    return set(world, id(T), T, val);
+}
+
+pub fn singleton_get(world: *const world_t, comptime T: type) ?*const T {
+    return get(world, id(T), T);
+}
+
+// ecs_entity_t ecs_run(ecs_world_t *world,ecs_entity_t system,ecs_ftime_t delta_time,void *param);
+extern fn ecs_run(world: *world_t, system: entity_t, delta_time: ftime_t, param: ?*anyopaque) entity_t;
+pub fn run(world: *world_t, system: entity_t, delta_time: ftime_t, param: ?*anyopaque) entity_t {
+    return ecs_run(world, system, delta_time, param);
+}

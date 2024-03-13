@@ -1,5 +1,9 @@
 const std = @import("std");
+const ecs = @import("flecs");
 const app = @import("app.zig");
+const eng = @import("./vulkan/engine.zig");
+const scene = @import("scene.zig");
+const sdl = @import("sdl.zig");
 const testing = std.testing;
 const builtin = @import("builtin");
 const VulkanEngine = @import("vulkan_engine.zig");
@@ -11,15 +15,22 @@ pub fn main() !void {
         @panic("Leaked memory");
     };
 
-    // try app.run();
+    const world = ecs.init();
+    defer _ = ecs.fini(world);
+    
+    app.init(world, gpa.allocator());
+    sdl.init(world);
+    scene.init(world);
 
     if (builtin.os.tag == .windows) {
-        var engine = VulkanEngine.init(gpa.allocator()) catch |err| {
-            std.debug.print("Unable to create vulkan engine: {}\n", .{err});
-            @panic("Unable to create vulkan engine");
-        };
-        defer engine.cleanup();
-        try engine.run();
+        eng.init(world);
+
+        // var engine = VulkanEngine.init(gpa.allocator()) catch |err| {
+        //     std.debug.print("Unable to create vulkan engine: {}\n", .{err});
+        //     @panic("Unable to create vulkan engine");
+        // };
+        // defer engine.cleanup();
+        // try engine.run();
     } else if (builtin.os.tag == .macos) {
         // std.debug.print("MacOS verision at least 14: {}\n", .{macosVersionAtLeast(15, 0, 0)});
         var engine = MetalEngine.init(gpa.allocator()) catch |err| {
@@ -32,6 +43,9 @@ pub fn main() !void {
     } else {
         @panic("platform not supported");
     }
+
+    app.run(world);
+
 }
 
 // pub fn macosVersionAtLeast(major: i64, minor: i64, patch: i64) bool {

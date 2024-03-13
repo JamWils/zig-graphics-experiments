@@ -30,7 +30,7 @@ const VulkanEngine = struct {
     graphics_queue: c.VkQueue,
     presentation_queue: c.VkQueue,
     swapchain: c.VkSwapchainKHR,
-    swapchain_image_format: c.VkFormat,
+    // swapchain_image_format: c.VkFormat,
     swapchain_extent: c.VkExtent2D,
 
     swapchain_images: []c.VkImage,
@@ -78,7 +78,6 @@ const VulkanEngine = struct {
 
     pub fn cleanup(self: *VulkanEngine) void {
         _ = c.vkDeviceWaitIdle(self.device);
-
         
         self.allocator.free(self.sampler_descriptor_sets);
         c.vkDestroySampler(self.device, self.texture_sampler, null);
@@ -348,7 +347,7 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
         .window_width = @intCast(window_width),
     });
 
-    const model_uniform_alignment = vkds.pad_with_buffer_offset(@sizeOf(scene.UBO), physical_device.min_uniform_buffer_offset_alignment);
+    const model_uniform_alignment = vkds.padWithBufferOffset(@sizeOf(scene.UBO), physical_device.min_uniform_buffer_offset_alignment);
 
     const render_pass = try vkr.createRenderPass(physical_device.handle, device.handle, swapchain.surface_format.format);
     const descriptor_set_layout = try vkds.createDescriptorSetLayout(device.handle);
@@ -380,7 +379,7 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
     });
     const depth_image = try vks.createDepthBufferImage(physical_device.handle, device.handle, swapchain.image_extent);
     const swapchain_framebuffers = try vks.createFramebuffer(alloc, device.handle, swapchain, depth_image, render_pass.handle);
-    const graphics_command_pool = try vkc.createCommandPool(device.handle, physical_device.queue_indices);
+    const graphics_command_pool = try vkc.createCommandPool(device.handle, physical_device.queue_indices.graphics_queue_location);
     const command_buffers = try vkc.createCommandBuffers(alloc, device.handle, graphics_command_pool.handle, swapchain_framebuffers.handles.len);
 
     const image_available_semaphores = try vksync.createSemaphores(alloc, device.handle, max_frame_draws);
@@ -460,9 +459,9 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
         .vertices = alloc.dupe(scene.Vertex, vertices[0..]) catch @panic("Out of memory"),
         .indices = alloc.dupe(u32, indices[0..]) catch @panic("Out of memory"),
         .texture_id = 0,
-        .model = scene.UBO{
-            .model = zmath.identity(),
-        },
+        // .model = scene.UBO{
+        //     .model = zmath.identity(),
+        // },
     };
     defer alloc.free(first_mesh.vertices);
     defer alloc.free(first_mesh.indices);
@@ -471,9 +470,9 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
         .vertices = alloc.dupe(scene.Vertex, vertices_two[0..]) catch @panic("Out of memory"),
         .indices = alloc.dupe(u32, indices[0..]) catch @panic("Out of memory"),
         .texture_id = 0,
-        .model = scene.UBO{
-            .model = zmath.identity(),
-        },
+        // .model = scene.UBO{
+        //     .model = zmath.identity(),
+        // },
     };
     defer alloc.free(second_mesh.vertices);
     defer alloc.free(second_mesh.indices);
@@ -527,7 +526,7 @@ pub fn init(alloc: std.mem.Allocator) !VulkanEngine {
         .graphics_queue = device.graphics_queue,
         .presentation_queue = device.presentation_queue,
         .swapchain = swapchain.handle,
-        .swapchain_image_format = swapchain.surface_format.format,
+        // .swapchain_image_format = swapchain.surface_format.format,
         .swapchain_extent = swapchain.image_extent,
         .swapchain_images = swapchain.images,
         .swapchain_image_views = swapchain.image_views,

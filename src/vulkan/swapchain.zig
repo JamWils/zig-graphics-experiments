@@ -2,6 +2,7 @@ const std = @import("std");
 const c = @import("../clibs.zig");
 const vke = @import("./error.zig");
 const vkb = @import("./buffer.zig");
+const engine = @import("./engine.zig");
 
 pub const SwapchainOpts = struct {
     graphics_queue_index: u32,
@@ -182,6 +183,42 @@ pub fn createFramebuffer(a: std.mem.Allocator, device: c.VkDevice, swapchain: Sw
         });
 
         try vke.checkResult(c.vkCreateFramebuffer(device, &framebuffer_create_info, null, framebuffer));
+    }
+
+    return .{
+        .handles = framebuffers,
+    };
+}
+
+pub const CreateFrameBufferOpts = struct {
+    device: c.VkDevice,
+    extent: c.VkExtent2D,
+    image_views: []c.VkImageView,
+    image_count: u32,
+    depth_image_view: c.VkImageView,
+    render_pass: c.VkRenderPass,
+};
+
+pub fn createFramebuffer2(a: std.mem.Allocator, opts: CreateFrameBufferOpts) !SwapchainFramebuffers {
+
+    const framebuffers = try a.alloc(c.VkFramebuffer, opts.image_count);
+    for (opts.image_views, framebuffers) |image_view, *framebuffer| {
+        const attachments = [2]c.VkImageView{
+            image_view,
+            opts.depth_image_view,
+        };
+
+        var framebuffer_create_info = std.mem.zeroInit(c.VkFramebufferCreateInfo, .{
+            .sType = c.VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+            .renderPass = opts.render_pass,
+            .attachmentCount = @as(u32, @intCast(attachments.len)),
+            .pAttachments = &attachments,
+            .width = opts.extent.width,
+            .height = opts.extent.height,
+            .layers = 1,
+        });
+
+        try vke.checkResult(c.vkCreateFramebuffer(opts.device, &framebuffer_create_info, null, framebuffer));
     }
 
     return .{

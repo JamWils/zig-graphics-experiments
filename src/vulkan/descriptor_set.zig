@@ -270,8 +270,8 @@ pub fn createTextureDescriptorSets(a: std.mem.Allocator, device: c.VkDevice, des
     return sets;
 }
 
-pub fn allocate_model_transfer_space(a: std.mem.Allocator, offset_alignment: u64, max_objects: u32) ![]scene.UBO {
-    const padded_alignment = pad_with_buffer_offset(@sizeOf(scene.UBO), offset_alignment);
+pub fn allocateModelTransferSpace(a: std.mem.Allocator, offset_alignment: u64, max_objects: u32) ![]scene.UBO {
+    const padded_alignment = padWithBufferOffset(@sizeOf(scene.UBO), offset_alignment);
     const data_size = padded_alignment * max_objects;
 
     const transfer_space = try a.alloc(scene.UBO, data_size);
@@ -281,37 +281,37 @@ pub fn allocate_model_transfer_space(a: std.mem.Allocator, offset_alignment: u64
 
 /// This calculates the size of the dynamic uniform buffer padding since the size of the object needs to
 /// align to the device's buffer offset.
-pub fn pad_with_buffer_offset(size: usize, min_buffer_offset: u64) usize {
+pub fn padWithBufferOffset(size: usize, min_buffer_offset: u64) usize {
     const val = (size + min_buffer_offset - 1) & ~(min_buffer_offset - 1);
     return val;
 }
 
-test "pad_with_buffer_offset size is zero" {
-    try testing.expectEqual(pad_with_buffer_offset(0, 32), 0);
+test "padWithBufferOffset size is zero" {
+    try testing.expectEqual(padWithBufferOffset(0, 32), 0);
 }
 
-test "pad_with_buffer_offset size is one less than minimum buffer offset" {
-    try testing.expectEqual(pad_with_buffer_offset(31, 32), 32);
+test "padWithBufferOffset size is one less than minimum buffer offset" {
+    try testing.expectEqual(padWithBufferOffset(31, 32), 32);
 }
 
-test "pad_with_buffer_offset size is equal to minimum buffer offset" {
-    try testing.expectEqual(pad_with_buffer_offset(32, 32), 32);
+test "padWithBufferOffset size is equal to minimum buffer offset" {
+    try testing.expectEqual(padWithBufferOffset(32, 32), 32);
 }
 
-test "pad_with_buffer_offset size is double minimum buffer offset" {
-    try testing.expectEqual(pad_with_buffer_offset(64, 32), 64);
+test "padWithBufferOffset size is double minimum buffer offset" {
+    try testing.expectEqual(padWithBufferOffset(64, 32), 64);
 }
 
-test "pad_with_buffer_offset size is one more than minimum buffer offset" {
-    try testing.expectEqual(pad_with_buffer_offset(33, 32), 64);
+test "padWithBufferOffset size is one more than minimum buffer offset" {
+    try testing.expectEqual(padWithBufferOffset(33, 32), 64);
 }
 
-test "pad_with_buffer_offset size is one less than double minimum buffer offset" {
-    try testing.expectEqual(pad_with_buffer_offset(63, 32), 64);
+test "padWithBufferOffset size is one less than double minimum buffer offset" {
+    try testing.expectEqual(padWithBufferOffset(63, 32), 64);
 }
 
-test "pad_with_buffer_offset size is double plus one more than minimum buffer offset" {
-    try testing.expectEqual(pad_with_buffer_offset(65, 32), 96);
+test "padWithBufferOffset size is double plus one more than minimum buffer offset" {
+    try testing.expectEqual(padWithBufferOffset(65, 32), 96);
 }
 
 
