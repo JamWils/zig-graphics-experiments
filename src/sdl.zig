@@ -1,5 +1,6 @@
 const std = @import("std");
 const ecs = @import("flecs");
+const scene = @import("scene");
 const c = @import("clibs.zig");
 const app = @import("app.zig");
 const log = std.log.scoped(.sdl);
@@ -45,16 +46,93 @@ fn destroyWindow(it: *ecs.iter_t) callconv(.C) void {
     for (0..it.count()) |i| {
         c.SDL_DestroyWindow(window[i].handle);
     }
+    c.SDL_Quit();
+}
+
+fn keySymbol(sdl_symbol: i32, shift: bool) usize {
+    if (sdl_symbol < 128) {
+        if (shift) {
+            if (sdl_symbol == scene.KEY_EQUAL) {
+                std.debug.print("Key: {c}\n", .{'+'});
+            } else if (sdl_symbol == scene.KEY_UNDERSCORE) {
+                std.debug.print("Key: {c}\n", .{'-'});
+            } else {
+                return @as(usize, @intCast(sdl_symbol));
+            }
+        }
+
+        return @as(usize, @intCast(sdl_symbol));
+    }
+
+    const sym = switch(sdl_symbol) {
+        c.SDLK_RIGHT => scene.KEY_RIGHT,
+        c.SDLK_LEFT => scene.KEY_LEFT,
+        c.SDLK_DOWN => scene.KEY_DOWN,
+        c.SDLK_UP => scene.KEY_UP,
+        c.SDLK_LCTRL => scene.KEY_LEFT_CTRL,
+        c.SDLK_RCTRL => scene.KEY_LEFT_CTRL,
+        c.SDLK_LSHIFT => scene.KEY_LEFT_SHIFT,
+        c.SDLK_RSHIFT => scene.KEY_LEFT_SHIFT,
+        c.SDLK_LALT => scene.KEY_LEFT_ALT,
+        c.SDLK_RALT => scene.KEY_LEFT_ALT,
+        else => 0,
+    };
+
+    return @as(usize, @intCast(sym));
 }
 
 fn processEvents(it: *ecs.iter_t) callconv(.C) void {
+    // std.debug.print("Processing events\n", .{});
+    var input = ecs.singleton_get_mut(it.world, scene.Input).?;
+    // ecs.os.free(input);
+
+    for (0..scene.KEY_COUNT) |j| {
+        scene.keyReset(&input.keys[j]);
+    }
+
     var event: c.SDL_Event = undefined;
     while (c.SDL_PollEvent(&event) != 0) {
         if(event.type == c.SDL_QUIT) {
-            // ecs.quit(it.world);
             ecs.enable(it.world, ecs.id(app.OnStop), true);
+        } else if (event.type == c.SDL_KEYDOWN) {
+            if (event.key.keysym.sym == c.SDLK_ESCAPE) {
+                ecs.enable(it.world, ecs.id(app.OnStop), true);
+            }
+            const sym = keySymbol(event.key.keysym.sym, false);
+            scene.keyDown(&input.keys[sym]);
+        } else if (event.type == c.SDL_KEYUP) {
+            const sym = keySymbol(event.key.keysym.sym, false);
+            scene.keyUp(&input.keys[sym]);
+        } else if (event.type == c.SDL_MOUSEBUTTONDOWN) {
+            if (event.button.button == c.SDL_BUTTON_LEFT) {
+                scene.keyDown(&input.mouse.left);
+            } else if (event.button.button == c.SDL_BUTTON_RIGHT) {
+                scene.keyDown(&input.mouse.right);
+            }
+        } else if (event.type == c.SDL_MOUSEBUTTONUP) {
+            if (event.button.button == c.SDL_BUTTON_LEFT) {
+                scene.keyUp(&input.mouse.left);
+            } else if (event.button.button == c.SDL_BUTTON_RIGHT) {
+                scene.keyUp(&input.mouse.right);
+            }
+        } else if (event.type == c.SDL_MOUSEMOTION) {
+            input.mouse.window.x = event.motion.x;
+            input.mouse.window.y = event.motion.y;
+            input.mouse.relative.x = event.motion.xrel;
+            input.mouse.relative.y = event.motion.yrel;
+        } else if (event.type == c.SDL_MOUSEWHEEL) {
+            input.mouse.scroll.x = event.wheel.x;
+            input.mouse.scroll.y = event.wheel.y;
+        } else if (event.type == c.SDL_WINDOWEVENT) {
+            // TODO: Need to update the canvas, destroy swapchains, images, etc.  Then recreate them with the proper size.
+            // if (event.window.event == c.SDL_WINDOWEVENT_RESIZED) {
+            //     std.debug.print("Window resized: {d}, {d}\n", .{event.window.data1, event.window.data2});
+            //     // _ = ecs.set(it.world, ecs.id(app.App), app.CanvasSize, .{ .width = event.window.data1, .height = event.window.data2 });
+            // }
         }
     }
+
+    // ecs.singleton_set(it.world, scene.Input, input.*);
 }
 
 pub fn init(world: *ecs.world_t) void {
@@ -78,6 +156,7 @@ pub fn init(world: *ecs.world_t) void {
 
     var event_desc = ecs.system_desc_t{};
     event_desc.callback = processEvents;
+    // event_desc.query.filter.terms[0] = .{ .id = ecs.id(scene.Input), .inout = ecs.inout_kind_t.InOut };
     ecs.SYSTEM(world, "EventSystem", ecs.OnUpdate, &event_desc);
 
     const window = ecs.new_entity(world, "Window");
