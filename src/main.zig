@@ -6,7 +6,6 @@ const scene = @import("scene");
 const sdl = @import("sdl.zig");
 const testing = std.testing;
 const builtin = @import("builtin");
-const MetalEngine = @import("metal_engine.zig");
 const c = @import("clibs.zig");
 
 pub fn main() !void {
@@ -27,12 +26,6 @@ pub fn main() !void {
         vulkan_eng.init(world);
     } else if (builtin.os.tag == .macos) {
         // std.debug.print("MacOS verision at least 14: {}\n", .{macosVersionAtLeast(15, 0, 0)});
-        var engine = MetalEngine.init(gpa.allocator()) catch |err| {
-            std.debug.print("Unable to create metal engine: {}\n", .{err});
-            @panic("Unable to create metal engine");
-        };
-        defer engine.cleanup();
-        try engine.run();
         
     } else {
         @panic("platform not supported");

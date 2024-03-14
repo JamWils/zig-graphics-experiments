@@ -1,6 +1,9 @@
 zig-out/
 zig-cache/
 
+frameworks/
+
 .DS_Store
 .vscode
 .idea
+
