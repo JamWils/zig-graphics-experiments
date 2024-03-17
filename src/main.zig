@@ -17,7 +17,7 @@ pub fn main() !void {
     const world = ecs.init();
     defer _ = ecs.fini(world);
     
-    app.init(world, gpa.allocator());
+    try app.init(world, gpa.allocator());
     sdl.init(world);
     scene.init(world);
 

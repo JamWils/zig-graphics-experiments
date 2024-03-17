@@ -17,12 +17,6 @@ pub const Mesh = struct {
     // model: UBO = .{.model = zmath.identity()},
 };
 
-pub const Transform = struct {
-    value: zmath.Mat
-};
 
-pub const Speed = struct {
-    value: f32
-};
 
 pub const UpdateBuffer = struct {};
