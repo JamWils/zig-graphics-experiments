@@ -6,19 +6,27 @@ pub fn build(b: *std.Build) void {
     
     const lib = b.addStaticLibrary(.{
         .name = "scene",
-        .root_source_file = .{ .path = "src/main.zig" },
+        .root_source_file = .{ .path = "src/root.zig" },
         .target = target,
         .optimize = optimize,
     });
 
     const scene_mod = b.addModule("scene", .{
-        .root_source_file = .{ .path = "./src/main.zig" },
+        .root_source_file = .{ .path = "./src/root.zig" },
         .imports = &.{
         },
     });
 
-    const zmath = b.dependency("zmath", .{});
-    scene_mod.addImport("zmath", zmath.module("zmath"));
+    const dependency_names = [_][]const u8{
+        "core",
+        "flecs",
+        "zmath",
+    };
+
+    for (dependency_names) |name| {
+        const dep = b.dependency(name, .{});
+        scene_mod.addImport(name, dep.module(name));
+    }
 
     b.installArtifact(lib);
 
