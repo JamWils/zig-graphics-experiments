@@ -19,6 +19,7 @@
 const builtin = @import("builtin");
 
 pub usingnamespace @cImport({
+    @cInclude("imgui/cimgui.h");
     @cInclude("SDL2/SDL.h");
     @cInclude("stb_image.h");
 

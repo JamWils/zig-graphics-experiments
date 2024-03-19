@@ -7,6 +7,7 @@ const sdl = @import("sdl.zig");
 const testing = std.testing;
 const builtin = @import("builtin");
 const MetalEngine = @import("metal_engine.zig");
+const c = @import("clibs.zig");
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -22,6 +23,7 @@ pub fn main() !void {
     scene.init(world);
 
     if (builtin.os.tag == .windows) {
+        std.debug.print("Windows {}\n", .{c.ImGuiWindowFlags});
         vulkan_eng.init(world);
     } else if (builtin.os.tag == .macos) {
         // std.debug.print("MacOS verision at least 14: {}\n", .{macosVersionAtLeast(15, 0, 0)});

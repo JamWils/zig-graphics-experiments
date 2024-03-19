@@ -48,6 +48,9 @@ pub fn build(b: *std.Build) !void {
     // }).module("flecs");
     // exe.root_module.addImport("flecs", flecs_module);
 
+    const imgui = b.dependency("imgui", .{ .target = target,.optimize = optimize });
+    exe.linkLibrary(imgui.artifact("imgui"));
+
     exe.linkLibC();
     unit_tests.linkLibC();
     exe.linkLibCpp();

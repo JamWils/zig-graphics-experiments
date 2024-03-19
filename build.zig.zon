@@ -12,6 +12,7 @@
     .dependencies = .{
         .core = .{ .path = "libs/core" },
         .flecs = .{ .path = "libs/flecs" },
+        .imgui = .{ .path = "libs/imgui" },
         .objc = .{ .path = "libs/objc" },
         .scene = .{ .path = "libs/scene" },
         .stb = .{ .path = "libs/stb" },
