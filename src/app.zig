@@ -1,36 +1,26 @@
 const std = @import("std");
+const core = @import("core");
 const ecs = @import("flecs");
 const scene = @import("scene");
 const c = @import("clibs.zig");
 const log = std.log.scoped(.app);
 
-pub const CanvasSize = struct {
-    width: c_int,
-    height: c_int,
-};
-
-pub const Allocator = struct {
-    alloc: std.mem.Allocator,
-};
-
-pub const OnStop = struct {};
-
 pub fn cleanUpInput(it: *ecs.iter_t) callconv(.C) void {
     const input = ecs.singleton_get(it.world, scene.Input).?;
-    const allocator = ecs.singleton_get(it.world, Allocator).?;
+    const allocator = ecs.singleton_get(it.world, core.Allocator).?;
     
     allocator.alloc.free(input.keys);
 }
 
 pub fn init(world: *ecs.world_t, allocator: std.mem.Allocator) !void {
-    ecs.TAG(world, OnStop);
-    ecs.COMPONENT(world, Allocator);
-    ecs.COMPONENT(world, CanvasSize);
+    ecs.TAG(world, core.OnStop);
+    ecs.COMPONENT(world, core.Allocator);
+    ecs.COMPONENT(world, core.CanvasSize);
     ecs.COMPONENT(world, scene.Input);
-    ecs.add_pair(world, ecs.id(OnStop), ecs.DependsOn, ecs.OnStore);
+    ecs.add_pair(world, ecs.id(core.OnStop), ecs.DependsOn, ecs.OnStore);
 
-    _ = ecs.singleton_set(world, Allocator, Allocator{ .alloc = allocator });
-    _ = ecs.singleton_set(world, CanvasSize, .{ .width = 800, .height = 600 });
+    _ = ecs.singleton_set(world, core.Allocator, core.Allocator{ .alloc = allocator });
+    _ = ecs.singleton_set(world, core.CanvasSize, .{ .width = 800, .height = 600 });
 
     const keys = allocator.alloc(scene.KeyState, scene.KEY_COUNT) catch @panic( "OOM!");
     _ = ecs.singleton_set(world, scene.Input, .{
@@ -46,11 +36,11 @@ pub fn init(world: *ecs.world_t, allocator: std.mem.Allocator) !void {
             .id = ecs.id(scene.Input), 
         },
     };
-    _ = ecs.SYSTEM(world, "DestroyInput", ecs.id(OnStop), &input_desc);
+    _ = ecs.SYSTEM(world, "DestroyInput", ecs.id(core.OnStop), &input_desc);
 }
 
 pub fn run(world: *ecs.world_t) void {
-    _ = ecs.enable(world, ecs.id(OnStop), false);
+    _ = ecs.enable(world, ecs.id(core.OnStop), false);
 
     var alive = true;
     while (alive) {

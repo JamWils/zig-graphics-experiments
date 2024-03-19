@@ -10,6 +10,7 @@
         "LICENSE",
     }, 
     .dependencies = .{
+        .core = .{ .path = "libs/core" },
         .flecs = .{ .path = "libs/flecs" },
         .objc = .{ .path = "libs/objc" },
         .scene = .{ .path = "libs/scene" },

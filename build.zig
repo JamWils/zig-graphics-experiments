@@ -34,6 +34,12 @@ pub fn build(b: *std.Build) !void {
         unit_tests.root_module.addImport(e.key_ptr.*, e.value_ptr.*);
     }
 
+    const core_module = b.dependency("core", .{
+        .target = target,
+        .optimize = optimize,
+    }).module("core");
+    exe.root_module.addImport("core", core_module);
+
     const flecs_module = b.dependency("flecs", .{
         .target = target,
         .optimize = optimize,

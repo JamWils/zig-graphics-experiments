@@ -1,8 +1,8 @@
 const std = @import("std");
+const core = @import("core");
 const ecs = @import("flecs");
 const scene = @import("scene");
 const zmath = @import("zmath");
-const app = @import("app.zig");
 
 const CameraDeceleration: f32 = 70;
 const CameraAcceleration: f32 = 50 + CameraDeceleration;
@@ -14,7 +14,7 @@ const CameraController = struct {};
 
 fn createCamera(it: *ecs.iter_t) callconv(.C) void {
     std.debug.print("Create camera: {s}\n", .{ecs.get_name(it.world, it.system).?});
-    const canvas_size = ecs.singleton_get(it.world, app.CanvasSize).?;
+    const canvas_size = ecs.singleton_get(it.world, core.CanvasSize).?;
 
     const camera_entity = ecs.new_id(it.world);
     _ = ecs.add(it.world, camera_entity, scene.CameraController);
@@ -211,7 +211,7 @@ fn calculateViewProjection(it: *ecs.iter_t) callconv(.C) void {
 
 fn simpleSceneSetUp(it: *ecs.iter_t) callconv(.C) void {
     std.debug.print("Start up: {s}\n", .{ecs.get_name(it.world, it.system).?});
-    const allocator = ecs.singleton_get(it.world, app.Allocator).?;
+    const allocator = ecs.singleton_get(it.world, core.Allocator).?;
 
     const vertices = [_]scene.Vertex{
         .{
@@ -301,7 +301,7 @@ fn simpleSceneSetUp(it: *ecs.iter_t) callconv(.C) void {
 
 fn cleanUpMeshAllocations(it: *ecs.iter_t) callconv(.C) void {
     std.debug.print("Clean up: {s}\n", .{ecs.get_name(it.world, it.system).?});
-    const allocator = ecs.singleton_get(it.world, app.Allocator).?;
+    const allocator = ecs.singleton_get(it.world, core.Allocator).?;
     const meshes = ecs.field(it, scene.Mesh, 1).?;
 
     for (meshes) |mesh| {
@@ -338,9 +338,9 @@ pub fn init(world: *ecs.world_t) void {
     var camera_desc = ecs.system_desc_t{};
     camera_desc.callback = createCamera;
     camera_desc.query.filter.terms[0] = .{ 
-        .id = ecs.id(app.CanvasSize), 
+        .id = ecs.id(core.CanvasSize), 
         .src = .{
-            .id = ecs.id(app.CanvasSize), 
+            .id = ecs.id(core.CanvasSize), 
         },
     };
     ecs.SYSTEM(world, "CreateCamera", ecs.OnStart, &camera_desc);
@@ -348,8 +348,8 @@ pub fn init(world: *ecs.world_t) void {
     var simple_scene_desc = ecs.system_desc_t{};
     simple_scene_desc.callback = simpleSceneSetUp;
     simple_scene_desc.query.filter.terms[0] = .{ 
-        .id = ecs.id(app.Allocator),
-        .src = .{ .id = ecs.id(app.Allocator) },
+        .id = ecs.id(core.Allocator),
+        .src = .{ .id = ecs.id(core.Allocator) },
     };
     ecs.SYSTEM(world, "SimpleSceneSetUp", ecs.OnStart, &simple_scene_desc);
 
@@ -399,5 +399,5 @@ pub fn init(world: *ecs.world_t) void {
     var clean_up_mesh_allocations_desc = ecs.system_desc_t{};
     clean_up_mesh_allocations_desc.callback = cleanUpMeshAllocations;
     clean_up_mesh_allocations_desc.query.filter.terms[0] = .{ .id = ecs.id(scene.Mesh), .inout = ecs.inout_kind_t.InOut, };
-    ecs.SYSTEM(world, "CleanUpMeshAllocations", ecs.id(app.OnStop), &clean_up_mesh_allocations_desc);
+    ecs.SYSTEM(world, "CleanUpMeshAllocations", ecs.id(core.OnStop), &clean_up_mesh_allocations_desc);
 }
