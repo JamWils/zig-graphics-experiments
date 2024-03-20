@@ -36,18 +36,6 @@ pub fn build(b: *std.Build) !void {
         unit_tests.root_module.addImport(e.key_ptr.*, e.value_ptr.*);
     }
 
-    // const core_module = b.dependency("core", .{
-    //     .target = target,
-    //     .optimize = optimize,
-    // }).module("core");
-    // exe.root_module.addImport("core", core_module);
-
-    // const flecs_module = b.dependency("flecs", .{
-    //     .target = target,
-    //     .optimize = optimize,
-    // }).module("flecs");
-    // exe.root_module.addImport("flecs", flecs_module);
-
     const imgui = b.dependency("imgui", .{ .target = target,.optimize = optimize });
     exe.linkLibrary(imgui.artifact("imgui"));
 
@@ -104,9 +92,6 @@ pub fn build(b: *std.Build) !void {
     // standard location when the user invokes the "install" step (the default
     // step when running `zig build`).
     b.installArtifact(exe);
-    // if (root_target.os.tag == .windows) {
-    //     b.installBinFile("thirdparty/sdl2/lib/SDL2.dll", "SDL2.dll");
-    // }
 
     // This *creates* a Run step in the build graph, to be executed when another
     // step is evaluated that depends on it. The next line below will establish

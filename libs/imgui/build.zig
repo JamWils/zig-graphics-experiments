@@ -1,4 +1,5 @@
 const std = @import("std");
+const sdl = @import("sdl");
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
@@ -6,7 +7,6 @@ pub fn build(b: *std.Build) void {
 
     const lib = b.addStaticLibrary(.{
         .name = "imgui",
-        // .root_source_file = .{ .path = "src/root.zig" },
         .target = target,
         .optimize = optimize,
     });
@@ -17,15 +17,19 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    sdl.addIncludePaths(lib);
+
     lib.linkLibC();
-    // lib.linkLibCpp();
+    lib.linkLibCpp();
 
     lib.addIncludePath(.{ .path = "upstream" });
     lib.addIncludePath(.{ .path = "src" });    
 
     lib.installHeader("src/cimgui.h", "imgui/cimgui.h");
-    lib.installHeadersDirectory("upstream", "imgui");
+    lib.installHeader("src/cimgui_impl.h", "imgui/cimgui_impl.h");
+    // lib.installHeadersDirectory("upstream", "imgui");
 
+    // TODO: Fix this function
     // walkUpstream(b, lib) catch |err| {
     //     std.debug.print("Error walking upstream: {}\n", .{err});
     // };
@@ -33,6 +37,7 @@ pub fn build(b: *std.Build) void {
     const c_flags = &.{"-fno-sanitize=undefined"};
     lib.addCSourceFiles(.{
         .files = &.{ 
+            // "src/cimgui.cpp",
             "upstream/imgui.cpp",
             "upstream/imgui_draw.cpp",
             "upstream/imgui_widgets.cpp",
@@ -42,13 +47,13 @@ pub fn build(b: *std.Build) void {
         .flags = c_flags,
     });
 
-    // lib.addCSourceFiles(.{
-    //     .files = &.{
-    //         "/upstream/backends/imgui_impl_sdl2.cpp",
+    lib.addCSourceFiles(.{
+        .files = &.{
+            "/upstream/backends/imgui_impl_sdl2.cpp",
     //         "/upstream/backends/imgui_impl_vulkan.cpp",
-    //     },
-    //     .flags = c_flags,
-    // });
+        },
+        .flags = c_flags,
+    });
 
     b.installArtifact(lib);
 
