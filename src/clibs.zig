@@ -26,6 +26,6 @@ pub usingnamespace @cImport({
     if (builtin.os.tag == .windows) {
         @cInclude("SDL2/SDL_vulkan.h");
         @cInclude("vulkan/vulkan.h");
-        @cInclude("vk_mem_alloc.h");
+        @cInclude("vma/vk_mem_alloc.h");
     }
 });

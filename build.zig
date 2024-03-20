@@ -1,5 +1,6 @@
 const std = @import("std");
 const flecs = @import("flecs");
+const vulkan = @import("vulkan");
 
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
@@ -42,6 +43,11 @@ pub fn build(b: *std.Build) !void {
     const sdl = b.dependency("sdl", .{ .target = target, .optimize = optimize });
     exe.linkLibrary(sdl.artifact("sdl"));
 
+    vulkan.addToCompileStep(b, target, exe);
+
+    // const vulkan = b.dependency("vulkan", .{ .target = target, .optimize = optimize });
+    // exe.linkLibrary(vulkan.artifact("vulkan"));
+
     exe.linkLibC();
     unit_tests.linkLibC();
     exe.linkLibCpp();
@@ -54,18 +60,10 @@ pub fn build(b: *std.Build) !void {
     switch (root_target.os.tag) {
         .windows => {
             compileShaders(b);
-            const vk_lib_name = if(root_target.os.tag == .windows) "vulkan-1" else "vulkan";
-            exe.linkSystemLibrary(vk_lib_name);
-            unit_tests.linkSystemLibrary(vk_lib_name);
-            if (b.graph.env_map.get("VK_SDK_PATH")) |path| {
-                exe.addLibraryPath(.{ .cwd_relative = std.fmt.allocPrint(b.allocator, "{s}/Lib", .{ path }) catch @panic("Could not add Vulkan library") });
-                unit_tests.addLibraryPath(.{ .cwd_relative = std.fmt.allocPrint(b.allocator, "{s}/Lib", .{ path }) catch @panic("Could not add Vulkan library") });
-                exe.addIncludePath(.{ .cwd_relative = std.fmt.allocPrint(b.allocator, "{s}/Include", .{ path }) catch @panic("Could not add Vulkan headers")});
-                unit_tests.addIncludePath(.{ .cwd_relative = std.fmt.allocPrint(b.allocator, "{s}/Include", .{ path }) catch @panic("Could not add Vulkan headers")});
-            }
+            
 
-            exe.addIncludePath(.{ .path = "thirdparty/vma"});
-            unit_tests.addIncludePath(.{ .path = "thirdparty/vma"});
+            // exe.addIncludePath(.{ .path = "thirdparty/vma"});
+            // unit_tests.addIncludePath(.{ .path = "thirdparty/vma"});
         },
         .macos => {
             exe.root_module.addImport("objc", b.dependency("objc", .{

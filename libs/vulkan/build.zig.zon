@@ -1,9 +1,7 @@
 .{
-    .name = "imgui",
+    .name = "vulkan",
     .version = "0.0.0",
     .dependencies = .{
-        .sdl = .{ .path = "../sdl" },
-        .vulkan = .{ .path = "../vulkan" },
     },
     .paths = .{
         "build.zig",

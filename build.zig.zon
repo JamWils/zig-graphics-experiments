@@ -17,6 +17,7 @@
         .scene = .{ .path = "libs/scene" },
         .sdl = .{ .path = "libs/sdl" },
         .stb = .{ .path = "libs/stb" },
+        .vulkan = .{ .path = "libs/vulkan" },
         .zmath = .{ .path = "libs/zmath" },
     } 
 }

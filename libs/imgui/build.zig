@@ -1,5 +1,6 @@
 const std = @import("std");
 const sdl = @import("sdl");
+const vulkan = @import("vulkan");
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
@@ -18,6 +19,7 @@ pub fn build(b: *std.Build) void {
     });
 
     sdl.addIncludePaths(lib);
+    vulkan.addIncludePaths(b, lib);
 
     lib.linkLibC();
     lib.linkLibCpp();
@@ -50,7 +52,7 @@ pub fn build(b: *std.Build) void {
     lib.addCSourceFiles(.{
         .files = &.{
             "/upstream/backends/imgui_impl_sdl2.cpp",
-    //         "/upstream/backends/imgui_impl_vulkan.cpp",
+            "/upstream/backends/imgui_impl_vulkan.cpp",
         },
         .flags = c_flags,
     });
