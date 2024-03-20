@@ -16,6 +16,22 @@ RUN apk update && apk add --no-cache \
     xz \
     bash
 
+# Install Dear ImGui
+ENV IMGUI_VERSION=1.90.4
+RUN cd /tmp && \
+    curl -L -O https://github.com/ocornut/imgui/archive/refs/tags/v${IMGUI_VERSION}.tar.gz && \
+    tar -xvzf v${IMGUI_VERSION}.tar.gz && \
+    rm v${IMGUI_VERSION}.tar.gz && \
+    mv imgui-${IMGUI_VERSION} /opt/imgui-${IMGUI_VERSION}
+
+# Install CImGui
+ENV CIMGUI_VERSION=1.53.1
+RUN cd /tmp && \
+    curl -L -O https://github.com/cimgui/cimgui/archive/refs/tags/v${CIMGUI_VERSION}.tar.gz && \
+    tar -xvzf v${CIMGUI_VERSION}.tar.gz && \
+    rm v${CIMGUI_VERSION}.tar.gz && \
+    mv cimgui-${CIMGUI_VERSION} /opt/cimgui-${CIMGUI_VERSION}
+
 # Install Vulkan SDK
 ENV VULKAN_SDK_VERSION=1.3.275.0 
 RUN cd /tmp && \

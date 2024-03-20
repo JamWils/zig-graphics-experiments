@@ -16,6 +16,6 @@ pub fn build(b: *std.Build) void {
 }
 
 pub fn addPathsToModule(mod: *std.Build.Module) void {
-    mod.addIncludePath(.{ .cwd_relative = "libs/stb/libs/stb" });
+    mod.addIncludePath(.{ .cwd_relative = "libs/stb/upstream/stb" });
     mod.addCSourceFile(.{ .file = .{ .cwd_relative = "libs/stb/src/stb_impl.c" }, .flags = &.{}});
 }

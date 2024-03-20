@@ -1,4 +1,5 @@
 const std = @import("std");
+const core = @import("core");
 const ecs = @import("flecs");
 const scene = @import("scene");
 const c = @import("clibs.zig");
@@ -17,7 +18,7 @@ fn createWindow(it: *ecs.iter_t) callconv(.C) void {
 
     for (0..it.count()) |i| {
         const e = it.entities()[i];
-        const size = ecs.get(it.world, e, app.CanvasSize).?;
+        const size = ecs.get(it.world, e, core.CanvasSize).?;
 
         const sdl_window = c.SDL_CreateWindow(
             "App Engine",
@@ -36,7 +37,7 @@ fn createWindow(it: *ecs.iter_t) callconv(.C) void {
         window[i].width = window_width;
         window[i].height = window_height;
 
-        // _ = ecs.set(it.world, ecs.id(app.App), app.CanvasSize, .{ .width = window_width, .height = window_height });
+        // _ = ecs.set(it.world, ecs.id(app.App), core.CanvasSize, .{ .width = window_width, .height = window_height });
     }
 }
 
@@ -93,10 +94,10 @@ fn processEvents(it: *ecs.iter_t) callconv(.C) void {
     var event: c.SDL_Event = undefined;
     while (c.SDL_PollEvent(&event) != 0) {
         if(event.type == c.SDL_QUIT) {
-            ecs.enable(it.world, ecs.id(app.OnStop), true);
+            ecs.enable(it.world, ecs.id(core.OnStop), true);
         } else if (event.type == c.SDL_KEYDOWN) {
             if (event.key.keysym.sym == c.SDLK_ESCAPE) {
-                ecs.enable(it.world, ecs.id(app.OnStop), true);
+                ecs.enable(it.world, ecs.id(core.OnStop), true);
             }
             const sym = keySymbol(event.key.keysym.sym, false);
             scene.keyDown(&input.keys[sym]);
@@ -127,7 +128,7 @@ fn processEvents(it: *ecs.iter_t) callconv(.C) void {
             // TODO: Need to update the canvas, destroy swapchains, images, etc.  Then recreate them with the proper size.
             // if (event.window.event == c.SDL_WINDOWEVENT_RESIZED) {
             //     std.debug.print("Window resized: {d}, {d}\n", .{event.window.data1, event.window.data2});
-            //     // _ = ecs.set(it.world, ecs.id(app.App), app.CanvasSize, .{ .width = event.window.data1, .height = event.window.data2 });
+            //     // _ = ecs.set(it.world, ecs.id(app.App), core.CanvasSize, .{ .width = event.window.data1, .height = event.window.data2 });
             // }
         }
     }
@@ -143,7 +144,7 @@ pub fn init(world: *ecs.world_t) void {
     var desc = ecs.system_desc_t{
         .callback = createWindow,
     };
-    desc.query.filter.terms[0] = .{ .id = ecs.id(app.CanvasSize), .inout = ecs.inout_kind_t.In };
+    desc.query.filter.terms[0] = .{ .id = ecs.id(core.CanvasSize), .inout = ecs.inout_kind_t.In };
     desc.query.filter.terms[1] = .{ .id = ecs.id(Window), .inout = ecs.inout_kind_t.Out };
     ecs.SYSTEM(world, "InitWindowSystem", ecs.OnStart, &desc);
 
@@ -161,7 +162,7 @@ pub fn init(world: *ecs.world_t) void {
 
     const window = ecs.new_entity(world, "Window");
     _ = ecs.set(world, window, Window, .{ .handle = undefined, .width = 0, .height = 0 });
-    _ = ecs.set(world, window, app.CanvasSize, .{ .width = 800, .height = 600 });
+    _ = ecs.set(world, window, core.CanvasSize, .{ .width = 800, .height = 600 });
 }
 
 pub fn checkSdl(res: c_int) void {

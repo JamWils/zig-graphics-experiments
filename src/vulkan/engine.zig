@@ -1,6 +1,6 @@
 const std = @import("std");
 const ecs = @import("flecs");
-const app = @import("../app.zig");
+const core = @import("core");
 const c = @import("../clibs.zig");
 const sdl = @import("../sdl.zig");
 const vkc = @import("command.zig");
@@ -157,7 +157,7 @@ const vk_alloc_callbacks: ?*c.VkAllocationCallbacks = null;
 /// Create the device and its associated surface
 fn createDevice(it: *ecs.iter_t) callconv(.C) void {
     std.debug.print("Start up: {s}\n", .{ecs.get_name(it.world, it.system).?});
-    const allocator = ecs.singleton_get(it.world, app.Allocator).?;
+    const allocator = ecs.singleton_get(it.world, core.Allocator).?;
 
     for (0..it.count()) |i| {
         const e = it.entities()[i];
@@ -190,7 +190,7 @@ fn createDevice(it: *ecs.iter_t) callconv(.C) void {
         });
 
         _ = ecs.set(it.world, new_entity, Surface, .{ .handle = surface });
-        _ = ecs.set(it.world, new_entity, app.CanvasSize, . { .width = window.width, .height = window.height });
+        _ = ecs.set(it.world, new_entity, core.CanvasSize, . { .width = window.width, .height = window.height });
         _ = ecs.set(it.world, new_entity, BufferOffset, .{ .alignment = model_uniform_alignment });
         _ = ecs.set(it.world, new_entity, QueueIndex, .{ 
             .graphics = physical_device.queue_indices.graphics_queue_location,
@@ -228,12 +228,12 @@ fn destroyDevice(it: *ecs.iter_t) callconv(.C) void {
 /// Create the swapchain and its associated image assets
 fn createSwapchain(it: *ecs.iter_t) callconv(.C) void {
     std.debug.print("Start up: {s}\n", .{ecs.get_name(it.world, it.system).?});
-    const allocator = ecs.singleton_get(it.world, app.Allocator).?;
+    const allocator = ecs.singleton_get(it.world, core.Allocator).?;
 
     const devices = ecs.field(it, Device, 1).?;
     const surfaces = ecs.field(it, Surface, 2).?;
     const queue_indexes = ecs.field(it, QueueIndex, 3).?;
-    const canvas_sizes = ecs.field(it, app.CanvasSize, 4).?;
+    const canvas_sizes = ecs.field(it, core.CanvasSize, 4).?;
 
     for (0..it.count()) |i| {
         const device = devices[i];
@@ -271,14 +271,14 @@ fn createSwapchain(it: *ecs.iter_t) callconv(.C) void {
             .memory = depth_image.memory,
         });
         _ = ecs.set(it.world, it.entities()[i], BufferCount, .{ .count = @as(u32, @intCast(swapchain.images.len)) });
-        ecs.enable_id(it.world, it.entities()[i], ecs.id(app.CanvasSize), false);
+        ecs.enable_id(it.world, it.entities()[i], ecs.id(core.CanvasSize), false);
     }
 }
 
 /// Destroy the swapchain and its associated image assets
 fn destroySwapchain(it: *ecs.iter_t) callconv(.C) void {
     std.debug.print("Shut down: {s}\n", .{ecs.get_name(it.world, it.system).?});
-    const allocator = ecs.singleton_get(it.world, app.Allocator).?;
+    const allocator = ecs.singleton_get(it.world, core.Allocator).?;
 
     const devices = ecs.field(it, Device, 1).?;
     const swapchains = ecs.field(it, Swapchain, 2).?;
@@ -309,7 +309,7 @@ fn destroySwapchain(it: *ecs.iter_t) callconv(.C) void {
 
 fn createRenderPass(it: *ecs.iter_t) callconv(.C) void {
     std.debug.print("Start up: {s}\n", .{ecs.get_name(it.world, it.system).?});
-    const allocator = ecs.singleton_get(it.world, app.Allocator).?;
+    const allocator = ecs.singleton_get(it.world, core.Allocator).?;
     const devices = ecs.field(it, Device, 1).?;
     const swapchains = ecs.field(it, Swapchain, 2).?;
     const buffer_counts = ecs.field(it, BufferCount, 3).?;
@@ -412,7 +412,7 @@ fn createRenderPass(it: *ecs.iter_t) callconv(.C) void {
 fn destroyRenderPass(it: *ecs.iter_t) callconv(.C) void {
     std.debug.print("Shut down: {s}\n", .{ecs.get_name(it.world, it.system).?});
 
-    const allocator = ecs.singleton_get(it.world, app.Allocator).?;
+    const allocator = ecs.singleton_get(it.world, core.Allocator).?;
     const devices = ecs.field(it, Device, 1).?;
     const render_passes = ecs.field(it, RenderPass, 2).?;
     const descriptor_set_layouts = ecs.field(it, DescriptorSetLayout, 3).?;
@@ -450,7 +450,7 @@ fn destroyRenderPass(it: *ecs.iter_t) callconv(.C) void {
 
 fn createCommandBuffers(it: *ecs.iter_t) callconv(.C) void {
     std.debug.print("Start up: {s}\n", .{ecs.get_name(it.world, it.system).?});
-    const allocator = ecs.singleton_get(it.world, app.Allocator).?;
+    const allocator = ecs.singleton_get(it.world, core.Allocator).?;
     const devices = ecs.field(it, Device, 1).?;
     const queue = ecs.field(it, QueueIndex, 2).?;
     const buffer_counts = ecs.field(it, BufferCount, 3).?;
@@ -495,7 +495,7 @@ fn createCommandBuffers(it: *ecs.iter_t) callconv(.C) void {
 
 fn destroyCommandBuffers(it: *ecs.iter_t) callconv(.C) void {
     std.debug.print("Shut down: {s}\n", .{ecs.get_name(it.world, it.system).?});
-    const allocator = ecs.singleton_get(it.world, app.Allocator).?;
+    const allocator = ecs.singleton_get(it.world, core.Allocator).?;
     const devices = ecs.field(it, Device, 1).?;
     const command_pools = ecs.field(it, CommandPool, 2).?;
     const command_buffers = ecs.field(it, CommandBuffers, 3).?;
@@ -606,7 +606,7 @@ fn destroyMeshBuffers(it: *ecs.iter_t) callconv(.C) void {
 
 fn simpleTextureSetUp(it: *ecs.iter_t) callconv(.C) void {
     std.debug.print("Start up: {s}\n", .{ecs.get_name(it.world, it.system).?});
-    const allocator = ecs.singleton_get(it.world, app.Allocator).?;
+    const allocator = ecs.singleton_get(it.world, core.Allocator).?;
     const devices = ecs.field(it, Device, 1).?;
     const queues = ecs.field(it, Queue, 2).?;
     const command_pools = ecs.field(it, CommandPool, 3).?;
@@ -646,7 +646,7 @@ fn simpleTextureSetUp(it: *ecs.iter_t) callconv(.C) void {
 
 fn destroySimpleTexture(it : *ecs.iter_t) callconv(.C) void {
     std.debug.print("Shut down: {s}\n", .{ecs.get_name(it.world, it.system).?});
-    const allocator = ecs.singleton_get(it.world, app.Allocator).?;
+    const allocator = ecs.singleton_get(it.world, core.Allocator).?;
     const textures = ecs.field(it, Texture, 1).?;
     const sampler_descriptor_sets = ecs.field(it, SamplerDescriptorSets, 2).?;
     const devices = ecs.field(it, Device, 3).?;
@@ -941,7 +941,7 @@ pub fn init(world: *ecs.world_t) void {
     swapchain_desc.query.filter.terms[0] = .{ .id = ecs.id(Device), .inout = ecs.inout_kind_t.In };
     swapchain_desc.query.filter.terms[1] = .{ .id = ecs.id(Surface), .inout = ecs.inout_kind_t.In };
     swapchain_desc.query.filter.terms[2] = .{ .id = ecs.id(QueueIndex), .inout = ecs.inout_kind_t.In };
-    swapchain_desc.query.filter.terms[3] = .{ .id = ecs.id(app.CanvasSize), .inout = ecs.inout_kind_t.In };
+    swapchain_desc.query.filter.terms[3] = .{ .id = ecs.id(core.CanvasSize), .inout = ecs.inout_kind_t.In };
     ecs.SYSTEM(world, "VkStartSwapchainSystem", ecs.OnStart, &swapchain_desc);
 
     var render_pass_desc = ecs.system_desc_t{};
@@ -1040,14 +1040,14 @@ pub fn init(world: *ecs.world_t) void {
     destroy_mesh_desc.query.filter.terms[0] = .{ .id = ecs.id(VertexBuffer), .inout = ecs.inout_kind_t.In };
     destroy_mesh_desc.query.filter.terms[1] = .{ .id = ecs.id(IndexBuffer), .inout = ecs.inout_kind_t.In };
     destroy_mesh_desc.query.filter.terms[2] = .{ .id = ecs.id(DeviceEntity), .inout = ecs.inout_kind_t.In };
-    ecs.SYSTEM(world, "VkDestroyMeshBufferSystem", ecs.id(app.OnStop), &destroy_mesh_desc);
+    ecs.SYSTEM(world, "VkDestroyMeshBufferSystem", ecs.id(core.OnStop), &destroy_mesh_desc);
     
     var destroy_texture_desc = ecs.system_desc_t{};
     destroy_texture_desc.callback = destroySimpleTexture;
     destroy_texture_desc.query.filter.terms[0] = .{ .id = ecs.id(Texture), .inout = ecs.inout_kind_t.In };
     destroy_texture_desc.query.filter.terms[1] = .{ .id = ecs.id(SamplerDescriptorSets), .inout = ecs.inout_kind_t.In };
     destroy_texture_desc.query.filter.terms[2] = .{ .id = ecs.id(Device), .inout = ecs.inout_kind_t.In };
-    ecs.SYSTEM(world, "VkDestroyTextureSystem", ecs.id(app.OnStop), &destroy_texture_desc);
+    ecs.SYSTEM(world, "VkDestroyTextureSystem", ecs.id(core.OnStop), &destroy_texture_desc);
 
     var destroy_command_buffer_desc = ecs.system_desc_t{};
     destroy_command_buffer_desc.callback = destroyCommandBuffers;
@@ -1057,7 +1057,7 @@ pub fn init(world: *ecs.world_t) void {
     destroy_command_buffer_desc.query.filter.terms[3] = .{ .id = ecs.id(ImageAvailableSemaphores), .inout = ecs.inout_kind_t.In };
     destroy_command_buffer_desc.query.filter.terms[4] = .{ .id = ecs.id(RenderFinishedSemaphores), .inout = ecs.inout_kind_t.In };
     destroy_command_buffer_desc.query.filter.terms[5] = .{ .id = ecs.id(DrawFences), .inout = ecs.inout_kind_t.In };
-    ecs.SYSTEM(world, "VkDestroyCommandBufferSystem", ecs.id(app.OnStop), &destroy_command_buffer_desc);
+    ecs.SYSTEM(world, "VkDestroyCommandBufferSystem", ecs.id(core.OnStop), &destroy_command_buffer_desc);
 
     var destroy_render_pass_desc = ecs.system_desc_t{};
     destroy_render_pass_desc.callback = destroyRenderPass;
@@ -1069,7 +1069,7 @@ pub fn init(world: *ecs.world_t) void {
     destroy_render_pass_desc.query.filter.terms[5] = .{ .id = ecs.id(DescriptorSets), .inout = ecs.inout_kind_t.In };
     destroy_render_pass_desc.query.filter.terms[6] = .{ .id = ecs.id(Pipeline), .inout = ecs.inout_kind_t.In };
     destroy_render_pass_desc.query.filter.terms[7] = .{ .id = ecs.id(Framebuffers), .inout = ecs.inout_kind_t.In };
-    ecs.SYSTEM(world, "VkDestroyRenderPassSystem", ecs.id(app.OnStop), &destroy_render_pass_desc);
+    ecs.SYSTEM(world, "VkDestroyRenderPassSystem", ecs.id(core.OnStop), &destroy_render_pass_desc);
 
     var destroy_swapchain_decs = ecs.system_desc_t{};
     destroy_swapchain_decs.callback = destroySwapchain;
@@ -1077,11 +1077,11 @@ pub fn init(world: *ecs.world_t) void {
     destroy_swapchain_decs.query.filter.terms[1] = .{ .id = ecs.id(Swapchain), .inout = ecs.inout_kind_t.In };
     destroy_swapchain_decs.query.filter.terms[2] = .{ .id = ecs.id(ImageAssets), .inout = ecs.inout_kind_t.In };
     destroy_swapchain_decs.query.filter.terms[3] = .{ .id = ecs.id(DepthImage), .inout = ecs.inout_kind_t.In };
-    ecs.SYSTEM(world, "VkDestroySwapchainSystem", ecs.id(app.OnStop), &destroy_swapchain_decs);
+    ecs.SYSTEM(world, "VkDestroySwapchainSystem", ecs.id(core.OnStop), &destroy_swapchain_decs);
 
     var destroy_decs = ecs.system_desc_t{};
     destroy_decs.callback = destroyDevice;
     destroy_decs.query.filter.terms[0] = .{ .id = ecs.id(Device), .inout = ecs.inout_kind_t.In };
     destroy_decs.query.filter.terms[1] = .{ .id = ecs.id(Surface), .inout = ecs.inout_kind_t.In };
-    ecs.SYSTEM(world, "VkDestroyDeviceSystem", ecs.id(app.OnStop), &destroy_decs);
+    ecs.SYSTEM(world, "VkDestroyDeviceSystem", ecs.id(core.OnStop), &destroy_decs);
 }

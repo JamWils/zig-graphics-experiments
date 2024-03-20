@@ -10,10 +10,14 @@
         "LICENSE",
     }, 
     .dependencies = .{
+        .core = .{ .path = "libs/core" },
         .flecs = .{ .path = "libs/flecs" },
+        .imgui = .{ .path = "libs/imgui" },
         .objc = .{ .path = "libs/objc" },
         .scene = .{ .path = "libs/scene" },
+        .sdl = .{ .path = "libs/sdl" },
         .stb = .{ .path = "libs/stb" },
+        .vulkan = .{ .path = "libs/vulkan" },
         .zmath = .{ .path = "libs/zmath" },
     } 
 }

@@ -13,9 +13,9 @@ pub fn build(b: *std.Build) void {
         .imports = &.{
         },
     });
-    mod.addIncludePath(.{ .cwd_relative = "libs/flecs" });
+    mod.addIncludePath(.{ .cwd_relative = "upstream/flecs" });
     mod.addCSourceFile(.{
-        .file = .{ .path = "libs/flecs/flecs.c" },
+        .file = .{ .path = "upstream/flecs/flecs.c" },
         .flags = &.{
             "-fno-sanitize=undefined",
             "-DFLECS_NO_CPP",
@@ -40,9 +40,9 @@ pub fn build(b: *std.Build) void {
 
 pub fn setupFlecs(step: *std.Build.Step.Compile) void {
     step.linkLibC();
-    step.addIncludePath(.{ .cwd_relative = "libs/flecs" });
+    step.addIncludePath(.{ .cwd_relative = "upstream/flecs" });
     step.addCSourceFile(.{
-        .file = .{ .path = "libs/flecs/flecs.c" },
+        .file = .{ .path = "upstream/flecs/flecs.c" },
         .flags = &.{
             "-fno-sanitize=undefined",
             "-DFLECS_NO_CPP",
