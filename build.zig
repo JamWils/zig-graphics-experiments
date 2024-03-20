@@ -51,6 +51,9 @@ pub fn build(b: *std.Build) !void {
     const imgui = b.dependency("imgui", .{ .target = target,.optimize = optimize });
     exe.linkLibrary(imgui.artifact("imgui"));
 
+    const sdl = b.dependency("sdl", .{ .target = target, .optimize = optimize });
+    exe.linkLibrary(sdl.artifact("sdl"));
+
     exe.linkLibC();
     unit_tests.linkLibC();
     exe.linkLibCpp();
@@ -73,29 +76,10 @@ pub fn build(b: *std.Build) !void {
                 unit_tests.addIncludePath(.{ .cwd_relative = std.fmt.allocPrint(b.allocator, "{s}/Include", .{ path }) catch @panic("Could not add Vulkan headers")});
             }
 
-            exe.linkSystemLibrary("SDL2");
-            exe.addLibraryPath(.{ .cwd_relative = "thirdparty/sdl2/lib" });
-            exe.addIncludePath(.{ .cwd_relative = "thirdparty/sdl2/include" });
             exe.addIncludePath(.{ .path = "thirdparty/vma"});
-
-            unit_tests.linkSystemLibrary("SDL2");
-            unit_tests.addLibraryPath(.{ .cwd_relative = "thirdparty/sdl2/lib" });
-            unit_tests.addIncludePath(.{ .cwd_relative = "thirdparty/sdl2/include" });
             unit_tests.addIncludePath(.{ .path = "thirdparty/vma"});
         },
         .macos => {
-            const lazy_path: std.Build.LazyPath = .{
-                .path = "thirdparty/macos/frameworks"
-            };
-            exe.addFrameworkPath(lazy_path);
-            exe.linkFramework("SDL2");
-            exe.addRPath(lazy_path);
-
-            unit_tests.addFrameworkPath(lazy_path);
-            unit_tests.linkFramework("SDL2");
-            unit_tests.addRPath(lazy_path);
-
-
             exe.root_module.addImport("objc", b.dependency("objc", .{
                 .target = target,
                 .optimize = optimize,
@@ -120,9 +104,9 @@ pub fn build(b: *std.Build) !void {
     // standard location when the user invokes the "install" step (the default
     // step when running `zig build`).
     b.installArtifact(exe);
-    if (root_target.os.tag == .windows) {
-        b.installBinFile("thirdparty/sdl2/lib/SDL2.dll", "SDL2.dll");
-    }
+    // if (root_target.os.tag == .windows) {
+    //     b.installBinFile("thirdparty/sdl2/lib/SDL2.dll", "SDL2.dll");
+    // }
 
     // This *creates* a Run step in the build graph, to be executed when another
     // step is evaluated that depends on it. The next line below will establish

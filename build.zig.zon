@@ -15,6 +15,7 @@
         .imgui = .{ .path = "libs/imgui" },
         .objc = .{ .path = "libs/objc" },
         .scene = .{ .path = "libs/scene" },
+        .sdl = .{ .path = "libs/sdl" },
         .stb = .{ .path = "libs/stb" },
         .zmath = .{ .path = "libs/zmath" },
     } 
