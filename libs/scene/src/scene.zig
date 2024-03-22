@@ -7,6 +7,7 @@ const transform = @import("transform.zig");
 const ux = @import("input.zig");
 const Camera = @import("camera.zig").Camera;
 const Perspective = @import("camera.zig").Perspective;
+const Light = @import("light.zig").Light;
 
 const CameraDeceleration: f32 = 70;
 const CameraAcceleration: f32 = 50 + CameraDeceleration;
@@ -42,6 +43,12 @@ fn createCamera(it: *ecs.iter_t) callconv(.C) void {
     };
     camera.projection[1][1] *= -1;
     _ = ecs.set(it.world, camera_entity, Camera, camera);
+
+    _ = ecs.set(it.world, camera_entity, Light, .{
+        .color = .{1, 1, 1, 1},
+        .ambientIntensity = 0.2,
+    });
+
 }
 
 fn updateCamera(it: *ecs.iter_t) callconv(.C) void {
@@ -328,6 +335,7 @@ fn spinTransform(it: *ecs.iter_t) callconv(.C) void {
 
 pub fn init(world: *ecs.world_t) void {
     ecs.COMPONENT(world, Camera);
+    ecs.COMPONENT(world, Light);
     ecs.COMPONENT(world, mesh.Mesh);
     ecs.COMPONENT(world, transform.Position);
     ecs.COMPONENT(world, transform.Orientation);

@@ -808,6 +808,7 @@ fn endCommands(it: *ecs.iter_t) callconv(.C) void {
 
 fn bindCameraMemory(it: *ecs.iter_t) callconv(.C) void {
     const cameras = ecs.field(it, scene.Camera, 1).?;
+    const lights = ecs.field(it, scene.Light, 2).?;
 
     var device_query_desc = ecs.filter_desc_t{};
     device_query_desc.terms[0] = .{ .id = ecs.id(Device), .inout = ecs.inout_kind_t.In };
@@ -838,6 +839,16 @@ fn bindCameraMemory(it: *ecs.iter_t) callconv(.C) void {
                 const camera = cameras[i];
                 @memcpy(@as([*]u8, @ptrCast(data)), std.mem.asBytes(&camera));
                 c.vkUnmapMemory(device.logical, camera_buffer.memory);
+
+                const light_buffer = uniform_buffers.buffers[image_index.index].light;
+                vke.checkResult(c.vkMapMemory(device.logical, light_buffer.memory, 0, @sizeOf(scene.Light), 0, &data)) catch |err| {
+                    std.debug.print("Failed to map light memory: {}\n", .{err});
+                    return;
+                };
+
+                const light = lights[i];
+                @memcpy(@as([*]u8, @ptrCast(data)), std.mem.asBytes(&light));
+                c.vkUnmapMemory(device.logical, light_buffer.memory);
             }
         }
     }
@@ -1021,6 +1032,7 @@ pub fn init(world: *ecs.world_t) void {
     var bind_camera_desc = ecs.system_desc_t{};
     bind_camera_desc.callback = bindCameraMemory;
     bind_camera_desc.query.filter.terms[0] = .{ .id = ecs.id(scene.Camera), .inout = ecs.inout_kind_t.In };
+    bind_camera_desc.query.filter.terms[1] = .{ .id = ecs.id(scene.Light), .inout = ecs.inout_kind_t.In };
     ecs.SYSTEM(world, "VkBindCameraMemorySystem", ecs.OnStore, &bind_camera_desc);
 
     var draw_desc = ecs.system_desc_t{};
