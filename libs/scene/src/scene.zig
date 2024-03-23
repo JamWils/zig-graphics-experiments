@@ -23,44 +23,41 @@ fn createCamera(it: *ecs.iter_t) callconv(.C) void {
 
     const camera_entity = ecs.new_id(it.world);
     _ = ecs.add(it.world, camera_entity, CameraController);
-    _ = ecs.set(it.world, camera_entity, transform.Position, .{.x = 0, .y = 0, .z = 5});
-    _ = ecs.set(it.world, camera_entity, transform.Orientation, .{.quat = zmath.qidentity()});
+    _ = ecs.set(it.world, camera_entity, transform.Position, .{ .x = 0, .y = 0, .z = 5 });
+    _ = ecs.set(it.world, camera_entity, transform.Orientation, .{ .quat = zmath.qidentity() });
     _ = ecs.set(it.world, camera_entity, transform.Velocity, std.mem.zeroInit(transform.Velocity, .{}));
     _ = ecs.set(it.world, camera_entity, transform.AngularVelocity, std.mem.zeroInit(transform.AngularVelocity, .{}));
 
     const dimension: f32 = @as(f32, @floatFromInt(canvas_size.width)) / @as(f32, @floatFromInt(canvas_size.height));
-    const projection: Perspective = .{
-        .fov = std.math.degreesToRadians(f32, 30), 
-        .aspect = dimension, 
-        .near = 0.1, 
-        .far = 1000
-    };
+    const projection: Perspective = .{ .fov = std.math.degreesToRadians(f32, 30), .aspect = dimension, .near = 0.1, .far = 1000 };
     _ = ecs.set(it.world, camera_entity, Perspective, projection);
 
     var camera = Camera{
-        .view = zmath.lookAtRh(.{0, 0, 2, 1}, .{0, 0, 0, 1}, .{0, 1, 0, 1}),
+        .view = zmath.lookAtRh(.{ 0, 0, 2, 1 }, .{ 0, 0, 0, 1 }, .{ 0, 1, 0, 1 }),
         .projection = zmath.perspectiveFovRh(projection.fov, projection.aspect, projection.near, projection.far),
     };
     camera.projection[1][1] *= -1;
     _ = ecs.set(it.world, camera_entity, Camera, camera);
 
     _ = ecs.set(it.world, camera_entity, Light, .{
-        .color = .{1, 1, 1, 1},
-        .ambientIntensity = 0.2,
+        .color = .{ 1, 1, 1, 1 },
+        .direction = .{ 0.0, 0.4, 1.0, 1.0 },
+        .ambientIntensity = 0.4,
+        .diffuseIntensity = 0.8,
     });
-
 }
 
 fn updateCamera(it: *ecs.iter_t) callconv(.C) void {
+    // std.debug.print("Update camera: {s}\n", .{ecs.get_name(it.world, it.system).?});
     const input = ecs.singleton_get(it.world, ux.Input).?;
     const velocities = ecs.field(it, transform.Velocity, 1).?;
     const orientations = ecs.field(it, transform.Orientation, 2).?;
     const angular_velocities = ecs.field(it, transform.AngularVelocity, 3).?;
-    
+
     for (orientations, velocities, angular_velocities, it.entities()) |orientation, v, av, e| {
         const mat = zmath.quatToMat(orientation.quat);
-        const forward = zmath.Vec{mat[2][0], mat[2][1], mat[2][2], 1};
-        const right = zmath.cross3(forward, zmath.Vec{0, 1, 0, 1});
+        const forward = zmath.Vec{ mat[2][0], mat[2][1], mat[2][2], 1 };
+        const right = zmath.cross3(forward, zmath.Vec{ 0, 1, 0, 1 });
         const up = zmath.cross3(right, forward);
 
         const acceleration = CameraAcceleration * it.delta_time;
@@ -110,7 +107,6 @@ fn updateCamera(it: *ecs.iter_t) callconv(.C) void {
         _ = ecs.set(it.world, e, transform.Velocity, vel);
         _ = ecs.set(it.world, e, transform.AngularVelocity, angular_vel);
     }
-
 }
 
 fn cameraControllerDecel(a: f32, dt: f32, v: f32) f32 {
@@ -131,7 +127,7 @@ fn cameraControllerDecelerate(it: *ecs.iter_t) callconv(.C) void {
     const dt = it.delta_time;
 
     for (velocities, angular_velocities, orientations, it.entities()) |vel, ang_vel, orientation, e| {
-        const v: zmath.Vec = .{vel.x, vel.y, vel.z, 1};
+        const v: zmath.Vec = .{ vel.x, vel.y, vel.z, 1 };
         const vel_normalized = zmath.normalize3(v);
 
         // TODO: Fix the camera speed
@@ -148,7 +144,7 @@ fn cameraControllerDecelerate(it: *ecs.iter_t) callconv(.C) void {
         };
         _ = ecs.set(it.world, e, transform.Velocity, new_velocity);
 
-        var new_ang_velocity = transform.AngularVelocity {
+        var new_ang_velocity = transform.AngularVelocity{
             .x = cameraControllerDecel(CameraAngularDeceleration, dt, ang_vel.x),
             .y = cameraControllerDecel(CameraAngularDeceleration, dt, ang_vel.y),
             .z = 0,
@@ -186,8 +182,8 @@ fn applyAngularVelocityToRotation(it: *ecs.iter_t) callconv(.C) void {
     const angular_velocities = ecs.field(it, transform.AngularVelocity, 2).?;
 
     for (rotations, angular_velocities, it.entities()) |rot, ang_vel, e| {
-        const delta_quat_x = zmath.quatFromAxisAngle(.{1, 0, 0, 1}, ang_vel.x * it.delta_time);
-        const delta_quat_y = zmath.quatFromAxisAngle(.{0, 1, 0, 1}, ang_vel.y * it.delta_time);
+        const delta_quat_x = zmath.quatFromAxisAngle(.{ 1, 0, 0, 1 }, ang_vel.x * it.delta_time);
+        const delta_quat_y = zmath.quatFromAxisAngle(.{ 0, 1, 0, 1 }, ang_vel.y * it.delta_time);
         const delta_quat = zmath.qmul(delta_quat_x, delta_quat_y);
         const new_rot = zmath.qmul(rot.quat, delta_quat);
         _ = ecs.set(it.world, e, transform.Orientation, .{
@@ -197,27 +193,27 @@ fn applyAngularVelocityToRotation(it: *ecs.iter_t) callconv(.C) void {
 }
 
 fn calculateViewProjection(it: *ecs.iter_t) callconv(.C) void {
+    // std.debug.print("Calculate view projection: {s}\n", .{ecs.get_name(it.world, it.system).?});
     const positions = ecs.field(it, transform.Position, 1).?;
     const orientations = ecs.field(it, transform.Orientation, 2).?;
     const perspectives = ecs.field(it, Perspective, 3).?;
 
-    for (positions, orientations, perspectives) |pos, orientation, pers| {
+    for (positions, orientations, perspectives, it.entities()) |pos, orientation, pers, e| {
         const rot_mat = zmath.quatToMat(orientation.quat);
         const pos_mat = zmath.translation(-pos.x, -pos.y, -pos.z);
         const view_mat = zmath.mul(rot_mat, pos_mat);
 
-        const look_at = -zmath.Vec{view_mat[2][0], view_mat[2][1], view_mat[2][2], 1};
-        const adjusted_look_at = zmath.Vec {pos.x, pos.y, pos.z, 1} + look_at;
+        const look_at = -zmath.Vec{ view_mat[2][0], view_mat[2][1], view_mat[2][2], 1 };
+        const adjusted_look_at = zmath.Vec{ pos.x, pos.y, pos.z, 1 } + look_at;
 
         var camera = Camera{
-            .view = zmath.lookAtRh(.{pos.x, pos.y, pos.z, 1}, adjusted_look_at, .{0, 1, 0, 1}),
+            .view = zmath.lookAtRh(.{ pos.x, pos.y, pos.z, 1 }, adjusted_look_at, .{ 0, 1, 0, 1 }),
             .projection = zmath.perspectiveFovRh(pers.fov, pers.aspect, pers.near, pers.far),
         };
         camera.projection[1][1] *= -1;
 
-        _ = ecs.set(it.world, it.system, Camera, camera);
+        _ = ecs.set(it.world, e, Camera, camera);
     }
-
 }
 
 fn simpleSceneSetUp(it: *ecs.iter_t) callconv(.C) void {
@@ -226,47 +222,55 @@ fn simpleSceneSetUp(it: *ecs.iter_t) callconv(.C) void {
 
     const vertices = [_]mesh.Vertex{
         .{
-            .position = .{-0.4, 0.4, 0.0},
-            .color = .{1, 0, 0},
-            .uv = .{1, 1},
+            .position = .{ -0.4, 0.4, 0.0 },
+            .color = .{ 1, 0, 0 },
+            .normal = .{ 0, 0, -1 },
+            .uv = .{ 1, 1 },
         },
         .{
-            .position = .{-0.4, -0.4, 0.0},
-            .color = .{0, 1, 0},
-            .uv = .{1, 0},
+            .position = .{ -0.4, -0.4, 0.0 },
+            .color = .{ 0, 1, 0 },
+            .normal = .{ 0, 0, -1 },
+            .uv = .{ 1, 0 },
         },
         .{
-            .position = .{0.4, -0.4, 0.0},
-            .color = .{0, 0, 1},
-            .uv = .{0, 0},
+            .position = .{ 0.4, -0.4, 0.0 },
+            .color = .{ 0, 0, 1 },
+            .normal = .{ 0, 0, -1 },
+            .uv = .{ 0, 0 },
         },
         .{
-            .position = .{0.4, 0.4, 0.0},
-            .color = .{1, 1, 0},
-            .uv = .{0, 1},
+            .position = .{ 0.4, 0.4, 0.0 },
+            .color = .{ 1, 1, 0 },
+            .normal = .{ 0, 0, -1 },
+            .uv = .{ 0, 1 },
         },
     };
 
     const vertices_two = [_]mesh.Vertex{
         .{
-            .position = .{-0.25, 0.6, 0.0},
-            .color = .{1, 0, 0},
-            .uv = .{1, 1},
+            .position = .{ -0.25, 0.6, 0.0 },
+            .color = .{ 1, 0, 0 },
+            .normal = .{ 0, 0, 1 },
+            .uv = .{ 1, 1 },
         },
         .{
-            .position = .{-0.25, -0.6, 0.0},
-            .color = .{1, 1, 0},
-            .uv = .{1, 0},
+            .position = .{ -0.25, -0.6, 0.0 },
+            .color = .{ 1, 1, 0 },
+            .normal = .{ 0, 0, 1 },
+            .uv = .{ 1, 0 },
         },
         .{
-            .position = .{0.25, -0.6, 0.0},
-            .color = .{1, 0, 1},
-            .uv = .{0, 0},
+            .position = .{ 0.25, -0.6, 0.0 },
+            .color = .{ 1, 0, 1 },
+            .normal = .{ 0, 0, 1 },
+            .uv = .{ 0, 0 },
         },
         .{
-            .position = .{0.25, 0.6, 0.0},
-            .color = .{1, 1, 0},
-            .uv = .{0, 1},
+            .position = .{ 0.25, 0.6, 0.0 },
+            .color = .{ 1, 1, 0 },
+            .normal = .{ 0, 0, 1 },
+            .uv = .{ 0, 1 },
         },
     };
 
@@ -290,10 +294,10 @@ fn simpleSceneSetUp(it: *ecs.iter_t) callconv(.C) void {
     const entity = ecs.new_id(it.world);
     _ = ecs.add(it.world, entity, mesh.UpdateBuffer);
     _ = ecs.set(it.world, entity, mesh.Mesh, first_mesh);
-    _ = ecs.set(it.world, entity, transform.Speed, transform.Speed{.value = 20});
+    _ = ecs.set(it.world, entity, transform.Speed, transform.Speed{ .value = 20 });
 
     var t1 = zmath.identity();
-    t1 = zmath.mul(zmath.translationV(.{0, 0, -2.5, 1}), t1);
+    t1 = zmath.mul(zmath.translationV(.{ 0, 0, -2.5, 1 }), t1);
     _ = ecs.set(it.world, entity, transform.Transform, transform.Transform{
         .value = t1,
     });
@@ -301,10 +305,10 @@ fn simpleSceneSetUp(it: *ecs.iter_t) callconv(.C) void {
     const entity2 = ecs.new_id(it.world);
     _ = ecs.add(it.world, entity2, mesh.UpdateBuffer);
     _ = ecs.set(it.world, entity2, mesh.Mesh, second_mesh);
-    _ = ecs.set(it.world, entity2, transform.Speed, transform.Speed{.value = 50});
+    _ = ecs.set(it.world, entity2, transform.Speed, transform.Speed{ .value = 50 });
 
     var t2 = zmath.identity();
-    t2 = zmath.mul(zmath.translationV(.{0, 0, -3, 1}), t2);
+    t2 = zmath.mul(zmath.translationV(.{ 0, 0, -3, 1 }), t2);
     _ = ecs.set(it.world, entity2, transform.Transform, transform.Transform{
         .value = t2,
     });
@@ -349,17 +353,17 @@ pub fn init(world: *ecs.world_t) void {
 
     var camera_desc = ecs.system_desc_t{};
     camera_desc.callback = createCamera;
-    camera_desc.query.filter.terms[0] = .{ 
-        .id = ecs.id(core.CanvasSize), 
+    camera_desc.query.filter.terms[0] = .{
+        .id = ecs.id(core.CanvasSize),
         .src = .{
-            .id = ecs.id(core.CanvasSize), 
+            .id = ecs.id(core.CanvasSize),
         },
     };
     ecs.SYSTEM(world, "CreateCamera", ecs.OnStart, &camera_desc);
 
     var simple_scene_desc = ecs.system_desc_t{};
     simple_scene_desc.callback = simpleSceneSetUp;
-    simple_scene_desc.query.filter.terms[0] = .{ 
+    simple_scene_desc.query.filter.terms[0] = .{
         .id = ecs.id(core.Allocator),
         .src = .{ .id = ecs.id(core.Allocator) },
     };
@@ -367,49 +371,105 @@ pub fn init(world: *ecs.world_t) void {
 
     var update_camera_desc = ecs.system_desc_t{};
     update_camera_desc.callback = updateCamera;
-    update_camera_desc.query.filter.terms[0] = .{ .id = ecs.id(transform.Velocity), .inout = ecs.inout_kind_t.InOut, };
-    update_camera_desc.query.filter.terms[1] = .{ .id = ecs.id(transform.Orientation), .inout = ecs.inout_kind_t.In, };
-    update_camera_desc.query.filter.terms[2] = .{ .id = ecs.id(transform.AngularVelocity), .inout = ecs.inout_kind_t.InOut, };
-    update_camera_desc.query.filter.terms[4] = .{ .id = ecs.id(CameraController), .inout = ecs.inout_kind_t.InOutNone, };
+    update_camera_desc.query.filter.terms[0] = .{
+        .id = ecs.id(transform.Velocity),
+        .inout = ecs.inout_kind_t.InOut,
+    };
+    update_camera_desc.query.filter.terms[1] = .{
+        .id = ecs.id(transform.Orientation),
+        .inout = ecs.inout_kind_t.In,
+    };
+    update_camera_desc.query.filter.terms[2] = .{
+        .id = ecs.id(transform.AngularVelocity),
+        .inout = ecs.inout_kind_t.InOut,
+    };
+    update_camera_desc.query.filter.terms[4] = .{
+        .id = ecs.id(CameraController),
+        .inout = ecs.inout_kind_t.InOutNone,
+    };
     ecs.SYSTEM(world, "UpdateCamera", ecs.OnUpdate, &update_camera_desc);
 
     var camera_controller_decel_desc = ecs.system_desc_t{};
     camera_controller_decel_desc.callback = cameraControllerDecelerate;
-    camera_controller_decel_desc.query.filter.terms[0] = .{ .id = ecs.id(transform.Velocity), .inout = ecs.inout_kind_t.InOut, };
-    camera_controller_decel_desc.query.filter.terms[1] = .{ .id = ecs.id(transform.AngularVelocity), .inout = ecs.inout_kind_t.InOut, };
-    camera_controller_decel_desc.query.filter.terms[2] = .{ .id = ecs.id(transform.Orientation), .inout = ecs.inout_kind_t.In, };
-    camera_controller_decel_desc.query.filter.terms[3] = .{ .id = ecs.id(CameraController), .inout = ecs.inout_kind_t.InOutNone, };
+    camera_controller_decel_desc.query.filter.terms[0] = .{
+        .id = ecs.id(transform.Velocity),
+        .inout = ecs.inout_kind_t.InOut,
+    };
+    camera_controller_decel_desc.query.filter.terms[1] = .{
+        .id = ecs.id(transform.AngularVelocity),
+        .inout = ecs.inout_kind_t.InOut,
+    };
+    camera_controller_decel_desc.query.filter.terms[2] = .{
+        .id = ecs.id(transform.Orientation),
+        .inout = ecs.inout_kind_t.In,
+    };
+    camera_controller_decel_desc.query.filter.terms[3] = .{
+        .id = ecs.id(CameraController),
+        .inout = ecs.inout_kind_t.InOutNone,
+    };
     ecs.SYSTEM(world, "CameraControllerDecelerate", ecs.OnUpdate, &camera_controller_decel_desc);
 
     var apply_velocity_to_position_desc = ecs.system_desc_t{};
     apply_velocity_to_position_desc.callback = applyVelocityToPosition;
-    apply_velocity_to_position_desc.query.filter.terms[0] = .{ .id = ecs.id(transform.Position), .inout = ecs.inout_kind_t.InOut, };
-    apply_velocity_to_position_desc.query.filter.terms[1] = .{ .id = ecs.id(transform.Velocity), .inout = ecs.inout_kind_t.In, };
+    apply_velocity_to_position_desc.query.filter.terms[0] = .{
+        .id = ecs.id(transform.Position),
+        .inout = ecs.inout_kind_t.InOut,
+    };
+    apply_velocity_to_position_desc.query.filter.terms[1] = .{
+        .id = ecs.id(transform.Velocity),
+        .inout = ecs.inout_kind_t.In,
+    };
     ecs.SYSTEM(world, "ApplyVelocityTo.Position", ecs.OnUpdate, &apply_velocity_to_position_desc);
 
     var apply_angular_velocity_to_rotation_desc = ecs.system_desc_t{};
     apply_angular_velocity_to_rotation_desc.callback = applyAngularVelocityToRotation;
-    apply_angular_velocity_to_rotation_desc.query.filter.terms[0] = .{ .id = ecs.id(transform.Orientation), .inout = ecs.inout_kind_t.InOut, };
-    apply_angular_velocity_to_rotation_desc.query.filter.terms[1] = .{ .id = ecs.id(transform.AngularVelocity), .inout = ecs.inout_kind_t.In, };
+    apply_angular_velocity_to_rotation_desc.query.filter.terms[0] = .{
+        .id = ecs.id(transform.Orientation),
+        .inout = ecs.inout_kind_t.InOut,
+    };
+    apply_angular_velocity_to_rotation_desc.query.filter.terms[1] = .{
+        .id = ecs.id(transform.AngularVelocity),
+        .inout = ecs.inout_kind_t.In,
+    };
     ecs.SYSTEM(world, "ApplyAngularVelocityToRotation", ecs.OnUpdate, &apply_angular_velocity_to_rotation_desc);
 
     var calculate_view_projection_desc = ecs.system_desc_t{};
     calculate_view_projection_desc.callback = calculateViewProjection;
-    calculate_view_projection_desc.query.filter.terms[0] = .{ .id = ecs.id(transform.Position), .inout = ecs.inout_kind_t.In, };
-    calculate_view_projection_desc.query.filter.terms[1] = .{ .id = ecs.id(transform.Orientation), .inout = ecs.inout_kind_t.In, };
-    calculate_view_projection_desc.query.filter.terms[2] = .{ .id = ecs.id(Perspective), .inout = ecs.inout_kind_t.In, };
-    calculate_view_projection_desc.query.filter.terms[3] = .{ .id = ecs.id(Camera), .inout = ecs.inout_kind_t.Out, };
+    calculate_view_projection_desc.query.filter.terms[0] = .{
+        .id = ecs.id(transform.Position),
+        .inout = ecs.inout_kind_t.In,
+    };
+    calculate_view_projection_desc.query.filter.terms[1] = .{
+        .id = ecs.id(transform.Orientation),
+        .inout = ecs.inout_kind_t.In,
+    };
+    calculate_view_projection_desc.query.filter.terms[2] = .{
+        .id = ecs.id(Perspective),
+        .inout = ecs.inout_kind_t.In,
+    };
+    calculate_view_projection_desc.query.filter.terms[3] = .{
+        .id = ecs.id(Camera),
+        .inout = ecs.inout_kind_t.Out,
+    };
     ecs.SYSTEM(world, "CalculateViewProjection", ecs.OnUpdate, &calculate_view_projection_desc);
 
     var spin_transform_desc = ecs.system_desc_t{};
     spin_transform_desc.callback = spinTransform;
-    spin_transform_desc.query.filter.terms[0] = .{ .id = ecs.id(transform.Transform), .inout = ecs.inout_kind_t.InOut, };
-    spin_transform_desc.query.filter.terms[1] = .{ .id = ecs.id(transform.Speed), .inout = ecs.inout_kind_t.In, };
+    spin_transform_desc.query.filter.terms[0] = .{
+        .id = ecs.id(transform.Transform),
+        .inout = ecs.inout_kind_t.InOut,
+    };
+    spin_transform_desc.query.filter.terms[1] = .{
+        .id = ecs.id(transform.Speed),
+        .inout = ecs.inout_kind_t.In,
+    };
     ecs.SYSTEM(world, "SpinTransform", ecs.OnUpdate, &spin_transform_desc);
-
 
     var clean_up_mesh_allocations_desc = ecs.system_desc_t{};
     clean_up_mesh_allocations_desc.callback = cleanUpMeshAllocations;
-    clean_up_mesh_allocations_desc.query.filter.terms[0] = .{ .id = ecs.id(mesh.Mesh), .inout = ecs.inout_kind_t.InOut, };
+    clean_up_mesh_allocations_desc.query.filter.terms[0] = .{
+        .id = ecs.id(mesh.Mesh),
+        .inout = ecs.inout_kind_t.InOut,
+    };
     ecs.SYSTEM(world, "CleanUpMeshAllocations", ecs.id(core.OnStop), &clean_up_mesh_allocations_desc);
 }
