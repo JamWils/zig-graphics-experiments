@@ -15,6 +15,7 @@ pub const UniformBufferOpts = struct {
     device: c.VkDevice,
     buffer_count: u32,
     model_memory_alignment: usize,
+    light_memory_alignment: usize,
     max_objects: u32,
 };
 
@@ -104,10 +105,9 @@ pub fn createUniformBuffers(a: std.mem.Allocator, opts: UniformBufferOpts) ![]Bu
     // const model_buffer_size = opts.model_memory_alignment * opts.max_objects;
 
     const buffer_size = @sizeOf(scene.Camera);
-    const light_buffer_size = @sizeOf(scene.Light);
+    const light_buffer_size = opts.light_memory_alignment * opts.max_objects;
     for (0..opts.buffer_count) |i| {
        
-
         const buffer = try vkb.createBuffer(.{
             .physical_device = opts.physical_device,
             .device = opts.device,
@@ -211,7 +211,7 @@ pub fn createSamplerDescriptorPool(device: c.VkDevice, max_objects: u32) !Descri
     return .{ .handle = pool };
 }
 
-pub fn createDescriptorSets(a: std.mem.Allocator, buffer_count: u32, device: c.VkDevice, descriptor_pool: c.VkDescriptorPool, descriptor_set_layout: c.VkDescriptorSetLayout, buffer_set: []BufferSet, _: u64) ![]c.VkDescriptorSet {
+pub fn createDescriptorSets(a: std.mem.Allocator, buffer_count: u32, device: c.VkDevice, descriptor_pool: c.VkDescriptorPool, descriptor_set_layout: c.VkDescriptorSetLayout, buffer_set: []BufferSet, light_uniform_alignment: u64) ![]c.VkDescriptorSet {
     var layouts = [_]c.VkDescriptorSetLayout{ descriptor_set_layout, descriptor_set_layout };
 
     var alloc_info = std.mem.zeroInit(c.VkDescriptorSetAllocateInfo, .{
@@ -244,7 +244,7 @@ pub fn createDescriptorSets(a: std.mem.Allocator, buffer_count: u32, device: c.V
         const light_buffer_info = std.mem.zeroInit(c.VkDescriptorBufferInfo, .{
             .buffer = buffer_set[i].light.handle,
             .offset = 0,
-            .range = @sizeOf(scene.Light),
+            .range = light_uniform_alignment,
         });
 
         const light_set_writes = std.mem.zeroInit(c.VkWriteDescriptorSet, .{
@@ -318,11 +318,11 @@ pub fn createTextureDescriptorSets(a: std.mem.Allocator, device: c.VkDevice, des
     return sets;
 }
 
-pub fn allocateModelTransferSpace(a: std.mem.Allocator, offset_alignment: u64, max_objects: u32) ![]scene.UBO {
-    const padded_alignment = padWithBufferOffset(@sizeOf(scene.UBO), offset_alignment);
+pub fn allocateTransferSpace(a: std.mem.Allocator, offset_alignment: u64, max_objects: u32, comptime T: type) ![]T {
+    const padded_alignment = padWithBufferOffset(@sizeOf(T), offset_alignment);
     const data_size = padded_alignment * max_objects;
 
-    const transfer_space = try a.alloc(scene.UBO, data_size);
+    const transfer_space = try a.alloc(T, data_size);
 
     return transfer_space;
 }
