@@ -94,7 +94,9 @@ pub const DescriptorSets = struct {
 
 pub const Pipeline = struct {
     graphics_handle: c.VkPipeline,
-    layout: c.VkPipelineLayout,
+    graphics_layout: c.VkPipelineLayout,
+    grid_handle: c.VkPipeline,
+    grid_layout: c.VkPipelineLayout,
 };
 
 pub const Framebuffers = struct {
@@ -395,6 +397,18 @@ fn createRenderPass(it: *ecs.iter_t) callconv(.C) void {
             return;
         };
 
+        const grid_pipeline = vkp.createGridPipeline(allocator.alloc, .{
+            .device = device.logical,
+            .swapchain_extent = swapchain.extent,
+            .render_pass = render_pass.handle,
+            .descriptor_set_layout = descriptor_set_layout.handle,
+            .sampler_descriptor_set_layout = sampler_descriptor_set_layout.handle,
+            .push_constant_range = push_constant_range,
+        }) catch |err| {
+            std.debug.print("Failed to create grid pipeline: {}\n", .{err});
+            return;
+        };
+
         const swapchain_framebuffers = vks.createFramebuffer2(allocator.alloc, .{
             .device = device.logical,
             .extent = swapchain.extent,
@@ -412,7 +426,12 @@ fn createRenderPass(it: *ecs.iter_t) callconv(.C) void {
         _ = ecs.set(it.world, e, UniformBuffers, .{ .buffers = uniform_buffers });
         _ = ecs.set(it.world, e, DescriptorPool, .{ .handle = descriptor_pool.handle, .sampler_handle = sampler_descriptor_pool.handle});
         _ = ecs.set(it.world, e, DescriptorSets, .{ .sets = descriptor_sets });
-        _ = ecs.set(it.world, e, Pipeline, .{ .graphics_handle = pipeline.graphics_pipeline_handle, .layout = pipeline.layout });
+        _ = ecs.set(it.world, e, Pipeline, .{ 
+            .graphics_handle = pipeline.handle, 
+            .graphics_layout = pipeline.layout,
+            .grid_handle = grid_pipeline.handle,
+            .grid_layout = grid_pipeline.layout,
+        });
         _ = ecs.set(it.world, e, Framebuffers, .{ .handles = swapchain_framebuffers.handles });
         _ = ecs.set(it.world, e, CurrentFrame, .{ .index = 0 });
         _ = ecs.set(it.world, e, ImageIndex, .{ .index = 0 });
@@ -444,6 +463,7 @@ fn destroyRenderPass(it: *ecs.iter_t) callconv(.C) void {
         }
         allocator.alloc.free(framebuffers[i].handles);
         c.vkDestroyPipeline(device.logical, pipelines[i].graphics_handle, null);
+        c.vkDestroyPipeline(device.logical, pipelines[i].grid_handle, null);
 
         for (uniform_buffers[i].buffers) |uniform_buffer| {
             uniform_buffer.deleteAndFree(device.logical);
@@ -454,7 +474,8 @@ fn destroyRenderPass(it: *ecs.iter_t) callconv(.C) void {
         c.vkDestroyDescriptorPool(device.logical, descriptor_pools[i].sampler_handle, null);
         allocator.alloc.free(descriptor_sets[i].sets);
 
-        c.vkDestroyPipelineLayout(device.logical, pipelines[i].layout, null);
+        c.vkDestroyPipelineLayout(device.logical, pipelines[i].graphics_layout, null);
+        c.vkDestroyPipelineLayout(device.logical, pipelines[i].grid_layout, null);
         c.vkDestroyDescriptorSetLayout(device.logical, descriptor_set_layouts[i].handle, null);
         c.vkDestroyDescriptorSetLayout(device.logical, descriptor_set_layouts[i].sampler_handle, null);
 
@@ -791,13 +812,13 @@ fn vertexAndIndexCommands(it: *ecs.iter_t) callconv(.C) void {
 
         c.vkCmdBindVertexBuffers(command_buffer, 0, 1, &v_buffers, &offsets);
         c.vkCmdBindIndexBuffer(command_buffer, index_buffer.buffer, 0, c.VK_INDEX_TYPE_UINT32);
-        c.vkCmdPushConstants(command_buffer, pipeline.layout, c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(scene.Transform), &transform.value);
+        c.vkCmdPushConstants(command_buffer, pipeline.graphics_layout, c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(scene.Transform), &transform.value);
 
         const descriptor_sets = [_]c.VkDescriptorSet{ descriptor_set_refs.sets[image_index.index], sampler_descriptor_sets.sets[mesh.texture_id] };
 
         // const dynamic_offset = @as(u32, @intCast(self.model_uniform_alignment * j));
         // c.vkCmdBindDescriptorSets(command_buffer, c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipeline_layout, 0, 1, &self.descriptor_sets[current_index], 1, &dynamic_offset);
-        c.vkCmdBindDescriptorSets(command_buffer, c.VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.layout, 0, @as(u32, @intCast(descriptor_sets.len)), &descriptor_sets, 0, null);
+        c.vkCmdBindDescriptorSets(command_buffer, c.VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.graphics_layout, 0, @as(u32, @intCast(descriptor_sets.len)), &descriptor_sets, 0, null);
         c.vkCmdDrawIndexed(command_buffer, index_buffer.count, 1, 0, 0, 0);
     }
 }
