@@ -76,6 +76,7 @@ pub const DepthImage = struct {
 
 pub const DescriptorSetLayout = struct {
     handle: c.VkDescriptorSetLayout,
+    grid_handle: c.VkDescriptorSetLayout,
     sampler_handle: c.VkDescriptorSetLayout,
 };
 
@@ -90,6 +91,7 @@ pub const DescriptorPool = struct {
 
 pub const DescriptorSets = struct {
     sets: []c.VkDescriptorSet,
+    // grid_set: c.VkDescriptorSet,
 };
 
 pub const Pipeline = struct {
@@ -397,11 +399,16 @@ fn createRenderPass(it: *ecs.iter_t) callconv(.C) void {
             return;
         };
 
+        const grid_descriptor_set_layout = vkds.createGridDescriptorSetLayout(device.logical) catch |err| {
+            std.debug.print("Failed to create camera descriptor set layout: {}\n", .{err});
+            return;
+        };
+
         const grid_pipeline = vkp.createGridPipeline(allocator.alloc, .{
             .device = device.logical,
             .swapchain_extent = swapchain.extent,
             .render_pass = render_pass.handle,
-            .descriptor_set_layout = descriptor_set_layout.handle,
+            .descriptor_set_layout = grid_descriptor_set_layout.handle,
             .sampler_descriptor_set_layout = sampler_descriptor_set_layout.handle,
             .push_constant_range = push_constant_range,
         }) catch |err| {
@@ -422,10 +429,15 @@ fn createRenderPass(it: *ecs.iter_t) callconv(.C) void {
         };
 
         _ = ecs.set(it.world, e, RenderPass, .{ .handle = render_pass.handle });
-        _ = ecs.set(it.world, e, DescriptorSetLayout, .{ .handle = descriptor_set_layout.handle, .sampler_handle = sampler_descriptor_set_layout.handle});
+        _ = ecs.set(it.world, e, DescriptorSetLayout, .{ 
+            .handle = descriptor_set_layout.handle, 
+            .grid_handle = grid_descriptor_set_layout.handle,
+            .sampler_handle = sampler_descriptor_set_layout.handle});
         _ = ecs.set(it.world, e, UniformBuffers, .{ .buffers = uniform_buffers });
         _ = ecs.set(it.world, e, DescriptorPool, .{ .handle = descriptor_pool.handle, .sampler_handle = sampler_descriptor_pool.handle});
-        _ = ecs.set(it.world, e, DescriptorSets, .{ .sets = descriptor_sets });
+        _ = ecs.set(it.world, e, DescriptorSets, .{ 
+            .sets = descriptor_sets,
+        });
         _ = ecs.set(it.world, e, Pipeline, .{ 
             .graphics_handle = pipeline.handle, 
             .graphics_layout = pipeline.layout,
@@ -477,6 +489,7 @@ fn destroyRenderPass(it: *ecs.iter_t) callconv(.C) void {
         c.vkDestroyPipelineLayout(device.logical, pipelines[i].graphics_layout, null);
         c.vkDestroyPipelineLayout(device.logical, pipelines[i].grid_layout, null);
         c.vkDestroyDescriptorSetLayout(device.logical, descriptor_set_layouts[i].handle, null);
+        c.vkDestroyDescriptorSetLayout(device.logical, descriptor_set_layouts[i].grid_handle, null);
         c.vkDestroyDescriptorSetLayout(device.logical, descriptor_set_layouts[i].sampler_handle, null);
 
         c.vkDestroyRenderPass(device.logical, render_passes[i].handle, null);
@@ -780,6 +793,11 @@ fn beginCommands(it: *ecs.iter_t) callconv(.C) void {
 
         render_pass_begin_info.framebuffer = framebuffer_refs.handles[image_index.index];
         c.vkCmdBeginRenderPass(command_buffer, &render_pass_begin_info, c.VK_SUBPASS_CONTENTS_INLINE);
+
+        c.vkCmdBindPipeline(command_buffer, c.VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.grid_handle);
+        c.vkCmdDraw(command_buffer, 6, 1, 0, 0);
+        
+
         c.vkCmdBindPipeline(command_buffer, c.VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.graphics_handle);
     }
 }

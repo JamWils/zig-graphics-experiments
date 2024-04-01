@@ -226,16 +226,16 @@ pub fn createGridPipeline(a: std.mem.Allocator, opts: GraphicsPipelineOpts) !Pip
         frag_shader_create_info,
     }; 
 
-    const binding_description: c.VkVertexInputBindingDescription = .{
-        .binding = 0,
-        .stride = @sizeOf(scene.Vertex),
-        .inputRate = c.VK_VERTEX_INPUT_RATE_VERTEX,
-    };
+    // const binding_description: c.VkVertexInputBindingDescription = .{
+    //     .binding = 0,
+    //     .stride = @sizeOf(scene.Vertex),
+    //     .inputRate = c.VK_VERTEX_INPUT_RATE_VERTEX,
+    // };
 
     const vertex_input_create_info = std.mem.zeroInit(c.VkPipelineVertexInputStateCreateInfo, .{
         .sType = c.VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-        .vertexBindingDescriptionCount = 1,
-        .pVertexBindingDescriptions = &binding_description,
+        .vertexBindingDescriptionCount = 0,
+        .pVertexBindingDescriptions = null,
         .vertexAttributeDescriptionCount = 0,
         .pVertexAttributeDescriptions = null,
     });
@@ -309,14 +309,14 @@ pub fn createGridPipeline(a: std.mem.Allocator, opts: GraphicsPipelineOpts) !Pip
         .pAttachments = &color_blend_attachment,
     });
 
-    const descriptor_set_layouts = [_]c.VkDescriptorSetLayout{opts.descriptor_set_layout, opts.sampler_descriptor_set_layout};
+    const descriptor_set_layouts = [_]c.VkDescriptorSetLayout{opts.descriptor_set_layout };
 
     const pipeline_layout_create_info = std.mem.zeroInit(c.VkPipelineLayoutCreateInfo, .{
         .sType = c.VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
         .setLayoutCount = @as(u32, @intCast(descriptor_set_layouts.len)),
         .pSetLayouts = &descriptor_set_layouts,
-        .pushConstantRangeCount = 1,
-        .pPushConstantRanges = &opts.push_constant_range,
+        .pushConstantRangeCount = 0,
+        .pPushConstantRanges = null,
     });
 
     var pipeline_layout: c.VkPipelineLayout = undefined;

@@ -297,7 +297,7 @@ fn simpleSceneSetUp(it: *ecs.iter_t) callconv(.C) void {
     _ = ecs.set(it.world, entity, transform.Speed, transform.Speed{ .value = 20 });
 
     var t1 = zmath.identity();
-    t1 = zmath.mul(zmath.translationV(.{ 0, 0, -2.5, 1 }), t1);
+    t1 = zmath.mul(zmath.translationV(.{ 0, 0, -4.5, 1 }), t1);
     _ = ecs.set(it.world, entity, transform.Transform, transform.Transform{
         .value = t1,
     });
@@ -308,7 +308,7 @@ fn simpleSceneSetUp(it: *ecs.iter_t) callconv(.C) void {
     _ = ecs.set(it.world, entity2, transform.Speed, transform.Speed{ .value = 50 });
 
     var t2 = zmath.identity();
-    t2 = zmath.mul(zmath.translationV(.{ 0, 0, -3, 1 }), t2);
+    t2 = zmath.mul(zmath.translationV(.{ 0, 0, -8, 1 }), t2);
     _ = ecs.set(it.world, entity2, transform.Transform, transform.Transform{
         .value = t2,
     });

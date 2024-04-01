@@ -6,15 +6,9 @@ vec4 gridColorThinLine = vec4(0.5, 0.5, 0.5, 1.0);
 vec4 gridColorThickLine = vec4(0.0, 0.0, 0.0, 1.0);
 const float gridMinPixelsBetweenCells = 2.0;
 
-const vec3 grid_pos[4] = vec3[4](
-	vec3(-1.0, 0.0, -1.0),
-	vec3( 1.0, 0.0, -1.0),
-	vec3( 1.0, 0.0,  1.0),
-	vec3(-1.0, 0.0,  1.0)
-);
-
-const int grid_indices[6] = int[6](
-	0, 1, 2, 2, 3, 0
+vec3 gridPlane[6] = vec3[](
+    vec3(1, 1, 0), vec3(-1, -1, 0), vec3(-1, 1, 0),
+    vec3(-1, -1, 0), vec3(1, 1, 0), vec3(1, -1, 0)
 );
 
 layout(set = 0, binding = 0) uniform Camera {
@@ -36,6 +30,6 @@ void main() {
     
     // gl_PointSize = 1.0;
 
-    gl_Position = vec4(grid_pos[grid_indices[gl_VertexIndex]], 1.0);
+    gl_Position = vec4(gridPlane[gl_VertexIndex].xyz, 1.0);
     
 }

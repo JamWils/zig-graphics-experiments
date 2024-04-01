@@ -35,6 +35,28 @@ pub const DescriptorPool = struct {
     handle: c.VkDescriptorPool,
 };
 
+pub fn createGridDescriptorSetLayout(device: c.VkDevice) !DescriptorSetLayout {
+    const camera_binding_info = std.mem.zeroInit(c.VkDescriptorSetLayoutBinding, .{
+        .binding = 0,
+        .descriptorType = c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .descriptorCount = 1,
+        .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT,
+        .pImmutableSamplers = null,
+    });
+
+    const bindings = [_]c.VkDescriptorSetLayoutBinding{ camera_binding_info };
+
+    var layout_info = std.mem.zeroInit(c.VkDescriptorSetLayoutCreateInfo, .{
+        .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .bindingCount = @as(u32, bindings.len),
+        .pBindings = &bindings,
+    });
+
+    var layout: c.VkDescriptorSetLayout = undefined;
+    try vke.checkResult(c.vkCreateDescriptorSetLayout(device, &layout_info, null, &layout));
+    return DescriptorSetLayout{ .handle = layout };
+}
+
 // This creates the descriptor set layout for the uniform buffer that will be used in the vertex shader.
 pub fn createDescriptorSetLayout(device: c.VkDevice) !DescriptorSetLayout {
     const camera_binding_info = std.mem.zeroInit(c.VkDescriptorSetLayoutBinding, .{
@@ -210,6 +232,43 @@ pub fn createSamplerDescriptorPool(device: c.VkDevice, max_objects: u32) !Descri
     try vke.checkResult(c.vkCreateDescriptorPool(device, &pool_info, null, &pool));
     return .{ .handle = pool };
 }
+
+// pub fn createGridDescriptorSets(a: std.mem.Allocator, buffer_count: u32, device: c.VkDevice, descriptor_pool: c.VkDescriptorPool, descriptor_set_layout: c.VkDescriptorSetLayout, buffer_set: []BufferSet, light_uniform_alignment: u64) ![]c.VkDescriptorSet {
+//     var layouts = [_]c.VkDescriptorSetLayout{ descriptor_set_layout, descriptor_set_layout };
+
+//     var alloc_info = std.mem.zeroInit(c.VkDescriptorSetAllocateInfo, .{
+//         .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+//         .descriptorPool = descriptor_pool,
+//         .descriptorSetCount = buffer_count,
+//         .pSetLayouts = &layouts,
+//     });
+    
+//     const sets = try a.alloc(c.VkDescriptorSet, buffer_count);
+//     try vke.checkResult(c.vkAllocateDescriptorSets(device, &alloc_info, sets.ptr));
+
+//     for (sets, 0..) |set, i| {
+//         const camera_buffer_info = std.mem.zeroInit(c.VkDescriptorBufferInfo, .{
+//             .buffer = buffer_set[i].camera.handle,
+//             .offset = 0,
+//             .range = @sizeOf(scene.Camera),
+//         });
+
+//         const camera_set_writes = std.mem.zeroInit(c.VkWriteDescriptorSet, .{
+//             .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+//             .dstSet = set,
+//             .dstBinding = 0,
+//             .dstArrayElement = 0,
+//             .descriptorType = c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+//             .descriptorCount = 1,
+//             .pBufferInfo = &camera_buffer_info,
+//         });
+
+//         const descriptor_writes = [_]c.VkWriteDescriptorSet{ camera_set_writes };
+//         c.vkUpdateDescriptorSets(device, @as(u32, descriptor_writes.len), &descriptor_writes, 0, null);
+//     }
+
+//     return sets;
+// }
 
 pub fn createDescriptorSets(a: std.mem.Allocator, buffer_count: u32, device: c.VkDevice, descriptor_pool: c.VkDescriptorPool, descriptor_set_layout: c.VkDescriptorSetLayout, buffer_set: []BufferSet, light_uniform_alignment: u64) ![]c.VkDescriptorSet {
     var layouts = [_]c.VkDescriptorSetLayout{ descriptor_set_layout, descriptor_set_layout };
