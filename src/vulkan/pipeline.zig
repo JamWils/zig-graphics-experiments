@@ -11,15 +11,18 @@ const Pipeline = data.Pipeline;
 const GraphicsPipelineOpts = struct {
     device: c.VkDevice,
     render_pass: c.VkRenderPass,
-    descriptor_set_layout: c.VkDescriptorSetLayout,
-    sampler_descriptor_set_layout: c.VkDescriptorSetLayout,
+    // descriptor_set_layout: c.VkDescriptorSetLayout,
+    // sampler_descriptor_set_layout: c.VkDescriptorSetLayout,
     swapchain_extent: c.VkExtent2D,
     push_constant_range: c.VkPushConstantRange,
 };
 
-pub fn createGraphicsPipeline(a: std.mem.Allocator, opts: GraphicsPipelineOpts) !Pipeline {
+pub fn createGraphicsPipeline(a: std.mem.Allocator, opts: GraphicsPipelineOpts, layouts: [3]c.VkDescriptorSetLayout) !Pipeline {
     const vertex_shader = try shader.createShaderModule(a, opts.device, "zig-out/shaders/shader.vert.spv");
     const fragment_shader = try shader.createShaderModule(a, opts.device, "zig-out/shaders/shader.frag.spv");
+
+    defer c.vkDestroyShaderModule(opts.device, fragment_shader, null);
+    defer c.vkDestroyShaderModule(opts.device, vertex_shader, null);
 
     const vertex_shader_create_info = std.mem.zeroInit(c.VkPipelineShaderStageCreateInfo, .{
         .sType = c.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
@@ -150,12 +153,12 @@ pub fn createGraphicsPipeline(a: std.mem.Allocator, opts: GraphicsPipelineOpts) 
         .pAttachments = &color_blend_attachment,
     });
 
-    const descriptor_set_layouts = [_]c.VkDescriptorSetLayout{opts.descriptor_set_layout, opts.sampler_descriptor_set_layout};
+    // const descriptor_set_layouts = [_]c.VkDescriptorSetLayout{opts.descriptor_set_layout, opts.sampler_descriptor_set_layout};
 
     const pipeline_layout_create_info = std.mem.zeroInit(c.VkPipelineLayoutCreateInfo, .{
         .sType = c.VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .setLayoutCount = @as(u32, @intCast(descriptor_set_layouts.len)),
-        .pSetLayouts = &descriptor_set_layouts,
+        .setLayoutCount = @as(u32, @intCast(layouts.len)),
+        .pSetLayouts = &layouts,
         .pushConstantRangeCount = 1,
         .pPushConstantRanges = &opts.push_constant_range,
     });
@@ -194,8 +197,7 @@ pub fn createGraphicsPipeline(a: std.mem.Allocator, opts: GraphicsPipelineOpts) 
     var graphics_pipeline: c.VkPipeline = undefined;
     try vke.checkResult(c.vkCreateGraphicsPipelines(opts.device, null, 1, &graphics_pipeline_create_info, null, &graphics_pipeline));
 
-    c.vkDestroyShaderModule(opts.device, fragment_shader, null);
-    c.vkDestroyShaderModule(opts.device, vertex_shader, null);
+   
 
     return .{
         .handle = graphics_pipeline,
@@ -203,9 +205,12 @@ pub fn createGraphicsPipeline(a: std.mem.Allocator, opts: GraphicsPipelineOpts) 
     };
 }
 
-pub fn createGridPipeline(a: std.mem.Allocator, opts: GraphicsPipelineOpts) !Pipeline {
+pub fn createGridPipeline(a: std.mem.Allocator, opts: GraphicsPipelineOpts, layouts: [1]c.VkDescriptorSetLayout) !Pipeline {
     const vertex_shader = try shader.createShaderModule(a, opts.device, "zig-out/shaders/grid.vert.spv");
     const fragment_shader = try shader.createShaderModule(a, opts.device, "zig-out/shaders/grid.frag.spv");
+
+    defer c.vkDestroyShaderModule(opts.device, fragment_shader, null);
+    defer c.vkDestroyShaderModule(opts.device, vertex_shader, null);
 
     const vertex_shader_create_info = std.mem.zeroInit(c.VkPipelineShaderStageCreateInfo, .{
         .sType = c.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
@@ -309,12 +314,10 @@ pub fn createGridPipeline(a: std.mem.Allocator, opts: GraphicsPipelineOpts) !Pip
         .pAttachments = &color_blend_attachment,
     });
 
-    const descriptor_set_layouts = [_]c.VkDescriptorSetLayout{opts.descriptor_set_layout };
-
     const pipeline_layout_create_info = std.mem.zeroInit(c.VkPipelineLayoutCreateInfo, .{
         .sType = c.VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .setLayoutCount = @as(u32, @intCast(descriptor_set_layouts.len)),
-        .pSetLayouts = &descriptor_set_layouts,
+        .setLayoutCount = @as(u32, @intCast(layouts.len)),
+        .pSetLayouts = &layouts,
         .pushConstantRangeCount = 0,
         .pPushConstantRanges = null,
     });
@@ -352,9 +355,6 @@ pub fn createGridPipeline(a: std.mem.Allocator, opts: GraphicsPipelineOpts) !Pip
 
     var graphics_pipeline: c.VkPipeline = undefined;
     try vke.checkResult(c.vkCreateGraphicsPipelines(opts.device, null, 1, &graphics_pipeline_create_info, null, &graphics_pipeline));
-
-    c.vkDestroyShaderModule(opts.device, fragment_shader, null);
-    c.vkDestroyShaderModule(opts.device, vertex_shader, null);
 
     return .{
         .handle = graphics_pipeline,

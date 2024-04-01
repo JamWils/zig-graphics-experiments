@@ -30,6 +30,6 @@ void main() {
     
     // gl_PointSize = 1.0;
 
-    gl_Position = vec4(gridPlane[gl_VertexIndex].xyz, 1.0);
+    gl_Position = camera.projection * camera.view * vec4(gridPlane[gl_VertexIndex].xyz, 1.0);
     
 }
