@@ -27,12 +27,12 @@ const Device = struct {
     debug_messenger: c.VkDebugUtilsMessengerEXT
 };
 
-const DeviceEntity = struct {
-    entity: ecs.entity_t,
+const DeviceAlignment = struct {
+    min_uniform_buffer_offset_alignment: u64,
 };
 
-const BufferOffset = struct {
-    alignment: u64,
+const DeviceEntity = struct {
+    entity: ecs.entity_t,
 };
 
 const Surface = struct {
@@ -75,7 +75,8 @@ pub const DepthImage = struct {
 };
 
 pub const DescriptorSetLayout = struct {
-    handle: c.VkDescriptorSetLayout,
+    camera_handle: c.VkDescriptorSetLayout,
+    light_handle: c.VkDescriptorSetLayout,
     sampler_handle: c.VkDescriptorSetLayout,
 };
 
@@ -89,12 +90,17 @@ pub const DescriptorPool = struct {
 };
 
 pub const DescriptorSets = struct {
-    sets: []c.VkDescriptorSet,
+    view_projection_pipeline1_sets: []c.VkDescriptorSet,
+    view_projection_pipeline2_sets: []c.VkDescriptorSet,
+    light_sets: []c.VkDescriptorSet,
+    // grid_set: c.VkDescriptorSet,
 };
 
 pub const Pipeline = struct {
     graphics_handle: c.VkPipeline,
-    layout: c.VkPipelineLayout,
+    graphics_layout: c.VkPipelineLayout,
+    grid_handle: c.VkPipeline,
+    grid_layout: c.VkPipelineLayout,
 };
 
 pub const Framebuffers = struct {
@@ -152,6 +158,10 @@ pub const ImageIndex = struct {
     index: u32,
 };
 
+pub const LightTransferSpace = struct {
+    values: []scene.Light,
+};
+
 const vk_alloc_callbacks: ?*c.VkAllocationCallbacks = null;
 
 /// Create the device and its associated surface
@@ -179,8 +189,6 @@ fn createDevice(it: *ecs.iter_t) callconv(.C) void {
             return;
         };
 
-        const model_uniform_alignment = vkds.padWithBufferOffset(@sizeOf(scene.UBO), physical_device.min_uniform_buffer_offset_alignment);
-
         const new_entity = ecs.new_entity(it.world, "VulkanDevice");
         _ = ecs.set(it.world, new_entity, Device, .{ 
             .instance = instance.handle, 
@@ -191,7 +199,7 @@ fn createDevice(it: *ecs.iter_t) callconv(.C) void {
 
         _ = ecs.set(it.world, new_entity, Surface, .{ .handle = surface });
         _ = ecs.set(it.world, new_entity, core.CanvasSize, . { .width = window.width, .height = window.height });
-        _ = ecs.set(it.world, new_entity, BufferOffset, .{ .alignment = model_uniform_alignment });
+        _ = ecs.set(it.world, new_entity, DeviceAlignment, .{ .min_uniform_buffer_offset_alignment = physical_device.min_uniform_buffer_offset_alignment });
         _ = ecs.set(it.world, new_entity, QueueIndex, .{ 
             .graphics = physical_device.queue_indices.graphics_queue_location,
             .presentation = physical_device.queue_indices.presentation_queue_location,
@@ -313,26 +321,39 @@ fn createRenderPass(it: *ecs.iter_t) callconv(.C) void {
     const devices = ecs.field(it, Device, 1).?;
     const swapchains = ecs.field(it, Swapchain, 2).?;
     const buffer_counts = ecs.field(it, BufferCount, 3).?;
-    const buffer_offsets = ecs.field(it, BufferOffset, 4).?;
+    const device_alignments = ecs.field(it, DeviceAlignment, 4).?;
     const depth_images = ecs.field(it, DepthImage, 5).?;
     const images_assets = ecs.field(it, ImageAssets, 6).?;
 
-
     for (it.entities(), 0..it.count()) |e, i| {
         const device = devices[i];
+        const device_alignment = device_alignments[i];
         const swapchain = swapchains[i];
         const buffer_count = buffer_counts[i];
-        const buffer_offset = buffer_offsets[i];
         const depth_image = depth_images[i];
         const image_assets = images_assets[i];
+
+        const model_uniform_alignment = vkds.padWithBufferOffset(@sizeOf(scene.UBO), device_alignment.min_uniform_buffer_offset_alignment);
+        const light_uniform_alignment = vkds.padWithBufferOffset(@sizeOf(scene.Light), device_alignment.min_uniform_buffer_offset_alignment);
+
+        const light_transfer_space = vkds.allocateTransferSpace(allocator.alloc, device_alignment.min_uniform_buffer_offset_alignment, 1000, scene.Light) catch |err| {
+            std.debug.print("Failed to allocate light transfer space: {}\n", .{err});
+            return;
+        };
 
         const render_pass = vkr.createRenderPass(device.physical, device.logical, swapchain.format) catch |err| {
             std.debug.print("Failed to create render pass: {}\n", .{err});
             return;
         };
 
-        const descriptor_set_layout = vkds.createDescriptorSetLayout(device.logical) catch |err| {
+        // Descriptor Set Layouts
+        const light_descriptor_set_layout = vkds.createLightDescriptorSetLayout(device.logical) catch |err| {
             std.debug.print("Failed to create descriptor set layout: {}\n", .{err});
+            return;
+        };
+
+        const camera_descriptor_set_layout = vkds.createCameraDescriptorSetLayout(device.logical) catch |err| {
+            std.debug.print("Failed to create camera descriptor set layout: {}\n", .{err});
             return;
         };
 
@@ -341,17 +362,7 @@ fn createRenderPass(it: *ecs.iter_t) callconv(.C) void {
             return;
         };
 
-        const uniform_buffers = vkds.createUniformBuffers(allocator.alloc, .{
-            .physical_device = device.physical,
-            .device = device.logical,
-            .buffer_count = buffer_count.count,
-            .model_memory_alignment = buffer_offset.alignment,
-            .max_objects = MAX_OBJECTS,
-        }) catch |err| {
-            std.debug.print("Failed to create uniform buffers: {}\n", .{err});
-            return;
-        };
-
+        // Descriptor Pools
         const descriptor_pool = vkds.createDescriptorPool(device.logical, buffer_count.count) catch |err| {
             std.debug.print("Failed to create descriptor pool: {}\n", .{err});
             return;
@@ -362,7 +373,22 @@ fn createRenderPass(it: *ecs.iter_t) callconv(.C) void {
             return;
         };
 
-        const descriptor_sets = vkds.createDescriptorSets(allocator.alloc, buffer_count.count, device.logical, descriptor_pool.handle, descriptor_set_layout.handle, uniform_buffers, buffer_offset.alignment) catch |err| {
+        // Uniform Buffers
+        const uniform_buffers = vkds.createUniformBuffers(allocator.alloc, .{
+            .physical_device = device.physical,
+            .device = device.logical,
+            .buffer_count = buffer_count.count,
+            .model_memory_alignment = model_uniform_alignment,
+            .light_memory_alignment = light_uniform_alignment,
+            .max_objects = MAX_OBJECTS,
+        }) catch |err| {
+            std.debug.print("Failed to create uniform buffers: {}\n", .{err});
+            return;
+        };
+
+        
+        // Descriptor Sets
+        const descriptor_sets = vkds.createDescriptorSets(allocator.alloc, buffer_count.count, device.logical, descriptor_pool.handle, camera_descriptor_set_layout.handle, light_descriptor_set_layout.handle, uniform_buffers, light_uniform_alignment) catch |err| {
             std.debug.print("Failed to create descriptor sets: {}\n", .{err});
             return;
         };
@@ -373,15 +399,25 @@ fn createRenderPass(it: *ecs.iter_t) callconv(.C) void {
             .size = @sizeOf(scene.Transform),
         };
 
+        const set_layouts = [_]c.VkDescriptorSetLayout{ camera_descriptor_set_layout.handle, light_descriptor_set_layout.handle, sampler_descriptor_set_layout.handle };
         const pipeline = vkp.createGraphicsPipeline(allocator.alloc, .{
             .device = device.logical,
             .swapchain_extent = swapchain.extent,
             .render_pass = render_pass.handle,
-            .descriptor_set_layout = descriptor_set_layout.handle,
-            .sampler_descriptor_set_layout = sampler_descriptor_set_layout.handle,
             .push_constant_range = push_constant_range,
-        }) catch |err| {
+        }, set_layouts) catch |err| {
             std.debug.print("Failed to create graphics pipeline: {}\n", .{err});
+            return;
+        };
+
+        const grid_set_layouts = [_]c.VkDescriptorSetLayout{ camera_descriptor_set_layout.handle };
+        const grid_pipeline = vkp.createGridPipeline(allocator.alloc, .{
+            .device = device.logical,
+            .swapchain_extent = swapchain.extent,
+            .render_pass = render_pass.handle,
+            .push_constant_range = push_constant_range,
+        }, grid_set_layouts) catch |err| {
+            std.debug.print("Failed to create grid pipeline: {}\n", .{err});
             return;
         };
 
@@ -398,14 +434,27 @@ fn createRenderPass(it: *ecs.iter_t) callconv(.C) void {
         };
 
         _ = ecs.set(it.world, e, RenderPass, .{ .handle = render_pass.handle });
-        _ = ecs.set(it.world, e, DescriptorSetLayout, .{ .handle = descriptor_set_layout.handle, .sampler_handle = sampler_descriptor_set_layout.handle});
+        _ = ecs.set(it.world, e, DescriptorSetLayout, .{ 
+            .camera_handle = camera_descriptor_set_layout.handle, 
+            .light_handle = light_descriptor_set_layout.handle,
+            .sampler_handle = sampler_descriptor_set_layout.handle});
         _ = ecs.set(it.world, e, UniformBuffers, .{ .buffers = uniform_buffers });
         _ = ecs.set(it.world, e, DescriptorPool, .{ .handle = descriptor_pool.handle, .sampler_handle = sampler_descriptor_pool.handle});
-        _ = ecs.set(it.world, e, DescriptorSets, .{ .sets = descriptor_sets });
-        _ = ecs.set(it.world, e, Pipeline, .{ .graphics_handle = pipeline.graphics_pipeline_handle, .layout = pipeline.layout });
+        _ = ecs.set(it.world, e, DescriptorSets, .{ 
+            .view_projection_pipeline1_sets = descriptor_sets.view_projection_pipeline1,
+            .view_projection_pipeline2_sets = descriptor_sets.view_projection_pipeline2,
+            .light_sets = descriptor_sets.light_sets,
+        });
+        _ = ecs.set(it.world, e, Pipeline, .{ 
+            .graphics_handle = pipeline.handle, 
+            .graphics_layout = pipeline.layout,
+            .grid_handle = grid_pipeline.handle,
+            .grid_layout = grid_pipeline.layout,
+        });
         _ = ecs.set(it.world, e, Framebuffers, .{ .handles = swapchain_framebuffers.handles });
         _ = ecs.set(it.world, e, CurrentFrame, .{ .index = 0 });
         _ = ecs.set(it.world, e, ImageIndex, .{ .index = 0 });
+        _ = ecs.set(it.world, e, LightTransferSpace, .{ .values = light_transfer_space });
     } 
 }
 
@@ -421,15 +470,19 @@ fn destroyRenderPass(it: *ecs.iter_t) callconv(.C) void {
     const descriptor_sets = ecs.field(it, DescriptorSets, 6).?;
     const pipelines = ecs.field(it, Pipeline, 7).?;
     const framebuffers = ecs.field(it, Framebuffers, 8).?;
+    const light_transfer_spaces = ecs.field(it, LightTransferSpace, 9).?;
 
     for (0..it.count()) |i| {
         const device = devices[i];
+
+        allocator.alloc.free(light_transfer_spaces[i].values);
 
         for (framebuffers[i].handles) |handle| {
             c.vkDestroyFramebuffer(device.logical, handle, null);
         }
         allocator.alloc.free(framebuffers[i].handles);
         c.vkDestroyPipeline(device.logical, pipelines[i].graphics_handle, null);
+        c.vkDestroyPipeline(device.logical, pipelines[i].grid_handle, null);
 
         for (uniform_buffers[i].buffers) |uniform_buffer| {
             uniform_buffer.deleteAndFree(device.logical);
@@ -438,10 +491,14 @@ fn destroyRenderPass(it: *ecs.iter_t) callconv(.C) void {
 
         c.vkDestroyDescriptorPool(device.logical, descriptor_pools[i].handle, null);
         c.vkDestroyDescriptorPool(device.logical, descriptor_pools[i].sampler_handle, null);
-        allocator.alloc.free(descriptor_sets[i].sets);
+        allocator.alloc.free(descriptor_sets[i].view_projection_pipeline1_sets);
+        allocator.alloc.free(descriptor_sets[i].view_projection_pipeline2_sets);
+        allocator.alloc.free(descriptor_sets[i].light_sets);
 
-        c.vkDestroyPipelineLayout(device.logical, pipelines[i].layout, null);
-        c.vkDestroyDescriptorSetLayout(device.logical, descriptor_set_layouts[i].handle, null);
+        c.vkDestroyPipelineLayout(device.logical, pipelines[i].graphics_layout, null);
+        c.vkDestroyPipelineLayout(device.logical, pipelines[i].grid_layout, null);
+        c.vkDestroyDescriptorSetLayout(device.logical, descriptor_set_layouts[i].camera_handle, null);
+        c.vkDestroyDescriptorSetLayout(device.logical, descriptor_set_layouts[i].light_handle, null);
         c.vkDestroyDescriptorSetLayout(device.logical, descriptor_set_layouts[i].sampler_handle, null);
 
         c.vkDestroyRenderPass(device.logical, render_passes[i].handle, null);
@@ -705,6 +762,7 @@ fn beginCommands(it: *ecs.iter_t) callconv(.C) void {
     const swapchains = ecs.field(it, Swapchain, 4).?;
     const framebuffers = ecs.field(it, Framebuffers, 5).?;
     const pipelines = ecs.field(it, Pipeline, 6).?;
+    const descriptor_sets_refs = ecs.field(it, DescriptorSets, 7).?;
 
     for (0..it.count()) |i| {
         const image_index = image_indices[i];
@@ -713,9 +771,10 @@ fn beginCommands(it: *ecs.iter_t) callconv(.C) void {
         const swapchain = swapchains[i];
         const framebuffer_refs = framebuffers[i];
         const pipeline = pipelines[i];
+        const descriptor_sets_ref = descriptor_sets_refs[i];
 
         const buffer_begin_info = c.VkCommandBufferBeginInfo{ .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
-        const color_clear_value = c.VkClearValue{ .color = .{ .float32 = [_]f32{ 0.3, 0.3, 0.4, 1.0 } } };
+        const color_clear_value = c.VkClearValue{ .color = .{ .float32 = [_]f32{ 0.0, 0.0, 0.0, 1.0 } } };
         const depth_clear_value = c.VkClearValue{ .depthStencil = .{ .depth = 1.0, .stencil = 0 } };
 
         var clear_values: [2]c.VkClearValue = .{
@@ -745,6 +804,15 @@ fn beginCommands(it: *ecs.iter_t) callconv(.C) void {
 
         render_pass_begin_info.framebuffer = framebuffer_refs.handles[image_index.index];
         c.vkCmdBeginRenderPass(command_buffer, &render_pass_begin_info, c.VK_SUBPASS_CONTENTS_INLINE);
+
+        c.vkCmdBindPipeline(command_buffer, c.VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.grid_handle);
+
+        const descriptor_sets = [_]c.VkDescriptorSet{ descriptor_sets_ref.view_projection_pipeline2_sets[image_index.index] };
+        c.vkCmdBindDescriptorSets(command_buffer, c.VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.grid_layout, 0, @as(u32, @intCast(descriptor_sets.len)), &descriptor_sets, 0, null);
+
+        c.vkCmdDraw(command_buffer, 6, 1, 0, 0);
+        
+
         c.vkCmdBindPipeline(command_buffer, c.VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.graphics_handle);
     }
 }
@@ -777,13 +845,14 @@ fn vertexAndIndexCommands(it: *ecs.iter_t) callconv(.C) void {
 
         c.vkCmdBindVertexBuffers(command_buffer, 0, 1, &v_buffers, &offsets);
         c.vkCmdBindIndexBuffer(command_buffer, index_buffer.buffer, 0, c.VK_INDEX_TYPE_UINT32);
-        c.vkCmdPushConstants(command_buffer, pipeline.layout, c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(scene.Transform), &transform.value);
+        c.vkCmdPushConstants(command_buffer, pipeline.graphics_layout, c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(scene.Transform), &transform.value);
 
-        const descriptor_sets = [_]c.VkDescriptorSet{ descriptor_set_refs.sets[image_index.index], sampler_descriptor_sets.sets[mesh.texture_id] };
+        // const descriptor_sets = [_]c.VkDescriptorSet{ descriptor_set_refs.sets[image_index.index], sampler_descriptor_sets.sets[mesh.texture_id] };
+        const descriptor_sets = [_]c.VkDescriptorSet{ descriptor_set_refs.view_projection_pipeline1_sets[image_index.index], descriptor_set_refs.light_sets[image_index.index], sampler_descriptor_sets.sets[mesh.texture_id] };
 
         // const dynamic_offset = @as(u32, @intCast(self.model_uniform_alignment * j));
         // c.vkCmdBindDescriptorSets(command_buffer, c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipeline_layout, 0, 1, &self.descriptor_sets[current_index], 1, &dynamic_offset);
-        c.vkCmdBindDescriptorSets(command_buffer, c.VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.layout, 0, @as(u32, @intCast(descriptor_sets.len)), &descriptor_sets, 0, null);
+        c.vkCmdBindDescriptorSets(command_buffer, c.VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.graphics_layout, 0, @as(u32, @intCast(descriptor_sets.len)), &descriptor_sets, 0, null);
         c.vkCmdDrawIndexed(command_buffer, index_buffer.count, 1, 0, 0, 0);
     }
 }
@@ -808,11 +877,14 @@ fn endCommands(it: *ecs.iter_t) callconv(.C) void {
 
 fn bindCameraMemory(it: *ecs.iter_t) callconv(.C) void {
     const cameras = ecs.field(it, scene.Camera, 1).?;
+    const lights = ecs.field(it, scene.Light, 2).?;
 
     var device_query_desc = ecs.filter_desc_t{};
     device_query_desc.terms[0] = .{ .id = ecs.id(Device), .inout = ecs.inout_kind_t.In };
     device_query_desc.terms[1] = .{ .id = ecs.id(ImageIndex), .inout = ecs.inout_kind_t.In };
     device_query_desc.terms[2] = .{ .id = ecs.id(UniformBuffers), .inout = ecs.inout_kind_t.In };
+    device_query_desc.terms[3] = .{ .id = ecs.id(DeviceAlignment), .inout = ecs.inout_kind_t.In };
+    device_query_desc.terms[4] = .{ .id = ecs.id(LightTransferSpace), .inout = ecs.inout_kind_t.In };
 
     const filter = ecs.filter_init(it.world, &device_query_desc) catch |err| {
         std.debug.print("Failed to create device query: {}\n", .{err});
@@ -826,6 +898,8 @@ fn bindCameraMemory(it: *ecs.iter_t) callconv(.C) void {
             const device = ecs.get(query_iter.world, e, Device).?;
             const image_index = ecs.get(query_iter.world, e, ImageIndex).?;
             const uniform_buffers = ecs.get(query_iter.world, e, UniformBuffers).?;
+            const device_alignment = ecs.get(query_iter.world, e, DeviceAlignment).?;
+            const light_transfer_space = ecs.get(query_iter.world, e, LightTransferSpace).?;
 
             for (0..it.count()) |i| {
                 const camera_buffer = uniform_buffers.buffers[image_index.index].camera;
@@ -838,6 +912,38 @@ fn bindCameraMemory(it: *ecs.iter_t) callconv(.C) void {
                 const camera = cameras[i];
                 @memcpy(@as([*]u8, @ptrCast(data)), std.mem.asBytes(&camera));
                 c.vkUnmapMemory(device.logical, camera_buffer.memory);
+
+                // const model_buffer = self.uniform_buffers[image_index].model;
+        
+                // var object_data: ?*align(@alignOf(scene.UBO)) anyopaque = undefined;
+                // var i: usize = 0;
+                // while (i < self.meshes.len): (i += 1) {
+                //     const this_model = &self.model_transfer_space[i];
+                //     this_model.* = self.meshes[i].model;
+                // }
+
+                // const copy_size = self.model_uniform_alignment * self.meshes.len;
+                // try vke.checkResult(c.vkMapMemory(self.device, model_buffer.memory, 0, copy_size, 0, &object_data));
+                // @memcpy(@as([*]scene.UBO, @ptrCast(object_data)), self.model_transfer_space[0..copy_size]);
+                // c.vkUnmapMemory(self.device, model_buffer.memory);
+
+                // TODO: Save alignment alongside buffer
+                var object_data: ?*align(@alignOf(scene.Light)) anyopaque = undefined;
+                const light_alignment = vkds.padWithBufferOffset(@sizeOf(scene.Light), device_alignment.min_uniform_buffer_offset_alignment);
+
+                const light = lights[i];
+                const this_light = &light_transfer_space.values[0];
+                this_light.* = light;
+
+
+                const light_buffer = uniform_buffers.buffers[image_index.index].light;
+                vke.checkResult(c.vkMapMemory(device.logical, light_buffer.memory, 0, light_alignment, 0, &object_data)) catch |err| {
+                    std.debug.print("Failed to map light memory: {}\n", .{err});
+                    return;
+                };
+
+                @memcpy(@as([*]scene.Light, @ptrCast(object_data)), light_transfer_space.values[0..light_alignment]);
+                c.vkUnmapMemory(device.logical, light_buffer.memory);
             }
         }
     }
@@ -903,6 +1009,7 @@ fn draw(it: *ecs.iter_t) callconv(.C) void {
 
 pub fn init(world: *ecs.world_t) void {
     ecs.COMPONENT(world, Device);
+    ecs.COMPONENT(world, DeviceAlignment);
     ecs.COMPONENT(world, DeviceEntity);
     ecs.COMPONENT(world, Surface);
     ecs.COMPONENT(world, Queue);
@@ -910,7 +1017,6 @@ pub fn init(world: *ecs.world_t) void {
     ecs.COMPONENT(world, Swapchain);
     ecs.COMPONENT(world, ImageAssets);
     ecs.COMPONENT(world, BufferCount);
-    ecs.COMPONENT(world, BufferOffset);
     ecs.COMPONENT(world, DepthImage);
     ecs.COMPONENT(world, RenderPass);
     ecs.COMPONENT(world, DescriptorSetLayout);
@@ -930,6 +1036,7 @@ pub fn init(world: *ecs.world_t) void {
     ecs.COMPONENT(world, SamplerDescriptorSets);
     ecs.COMPONENT(world, CurrentFrame);
     ecs.COMPONENT(world, ImageIndex);
+    ecs.COMPONENT(world, LightTransferSpace);
 
     var device_desc = ecs.system_desc_t{};
     device_desc.callback = createDevice;
@@ -949,7 +1056,7 @@ pub fn init(world: *ecs.world_t) void {
     render_pass_desc.query.filter.terms[0] = .{ .id = ecs.id(Device), .inout = ecs.inout_kind_t.In };
     render_pass_desc.query.filter.terms[1] = .{ .id = ecs.id(Swapchain), .inout = ecs.inout_kind_t.In };
     render_pass_desc.query.filter.terms[2] = .{ .id = ecs.id(BufferCount), .inout = ecs.inout_kind_t.In };
-    render_pass_desc.query.filter.terms[3] = .{ .id = ecs.id(BufferOffset), .inout = ecs.inout_kind_t.In };
+    render_pass_desc.query.filter.terms[3] = .{ .id = ecs.id(DeviceAlignment), .inout = ecs.inout_kind_t.In };
     render_pass_desc.query.filter.terms[4] = .{ .id = ecs.id(DepthImage), .inout = ecs.inout_kind_t.In };
     render_pass_desc.query.filter.terms[5] = .{ .id = ecs.id(ImageAssets), .inout = ecs.inout_kind_t.In };
     ecs.SYSTEM(world, "VkStartRenderPassSystem", ecs.OnStart, &render_pass_desc);
@@ -1001,6 +1108,7 @@ pub fn init(world: *ecs.world_t) void {
     begin_commands_desc.query.filter.terms[3] = .{ .id = ecs.id(Swapchain), .inout = ecs.inout_kind_t.In };
     begin_commands_desc.query.filter.terms[4] = .{ .id = ecs.id(Framebuffers), .inout = ecs.inout_kind_t.In };
     begin_commands_desc.query.filter.terms[5] = .{ .id = ecs.id(Pipeline), .inout = ecs.inout_kind_t.In };
+    begin_commands_desc.query.filter.terms[6] = .{ .id = ecs.id(DescriptorSets), .inout = ecs.inout_kind_t.In };
     ecs.SYSTEM(world, "VkBeginCommandsSystem", ecs.OnStore, &begin_commands_desc);
 
     var vertex_index_desc = ecs.system_desc_t{};
@@ -1021,6 +1129,7 @@ pub fn init(world: *ecs.world_t) void {
     var bind_camera_desc = ecs.system_desc_t{};
     bind_camera_desc.callback = bindCameraMemory;
     bind_camera_desc.query.filter.terms[0] = .{ .id = ecs.id(scene.Camera), .inout = ecs.inout_kind_t.In };
+    bind_camera_desc.query.filter.terms[1] = .{ .id = ecs.id(scene.Light), .inout = ecs.inout_kind_t.In };
     ecs.SYSTEM(world, "VkBindCameraMemorySystem", ecs.OnStore, &bind_camera_desc);
 
     var draw_desc = ecs.system_desc_t{};
@@ -1069,6 +1178,7 @@ pub fn init(world: *ecs.world_t) void {
     destroy_render_pass_desc.query.filter.terms[5] = .{ .id = ecs.id(DescriptorSets), .inout = ecs.inout_kind_t.In };
     destroy_render_pass_desc.query.filter.terms[6] = .{ .id = ecs.id(Pipeline), .inout = ecs.inout_kind_t.In };
     destroy_render_pass_desc.query.filter.terms[7] = .{ .id = ecs.id(Framebuffers), .inout = ecs.inout_kind_t.In };
+    destroy_render_pass_desc.query.filter.terms[8] = .{ .id = ecs.id(LightTransferSpace), .inout = ecs.inout_kind_t.In };
     ecs.SYSTEM(world, "VkDestroyRenderPassSystem", ecs.id(core.OnStop), &destroy_render_pass_desc);
 
     var destroy_swapchain_decs = ecs.system_desc_t{};
