@@ -40,10 +40,10 @@ fn createCamera(it: *ecs.iter_t) callconv(.C) void {
     _ = ecs.set(it.world, camera_entity, Camera, camera);
 
     _ = ecs.set(it.world, camera_entity, Light, .{
-        .color = .{ 1, 1, 1, 1 },
-        .direction = .{ 0.0, 0.4, 1.0, 1.0 },
-        .ambientIntensity = 0.4,
-        .diffuseIntensity = 0.8,
+        .color = .{ 1, 1, 1 },
+        .direction = .{ 0.0, 0.5, 1.0 },
+        .ambientIntensity = 1,
+        .diffuseIntensity = 1,
     });
 }
 
@@ -308,7 +308,7 @@ fn simpleSceneSetUp(it: *ecs.iter_t) callconv(.C) void {
     _ = ecs.set(it.world, entity2, transform.Speed, transform.Speed{ .value = 50 });
 
     var t2 = zmath.identity();
-    t2 = zmath.mul(zmath.translationV(.{ 0, 0, -8, 1 }), t2);
+    t2 = zmath.mul(zmath.translationV(.{ 0, 0.5, -7, 1 }), t2);
     _ = ecs.set(it.world, entity2, transform.Transform, transform.Transform{
         .value = t2,
     });
