@@ -774,7 +774,7 @@ fn beginCommands(it: *ecs.iter_t) callconv(.C) void {
         const descriptor_sets_ref = descriptor_sets_refs[i];
 
         const buffer_begin_info = c.VkCommandBufferBeginInfo{ .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
-        const color_clear_value = c.VkClearValue{ .color = .{ .float32 = [_]f32{ 0.3, 0.3, 0.4, 1.0 } } };
+        const color_clear_value = c.VkClearValue{ .color = .{ .float32 = [_]f32{ 0.0, 0.0, 0.0, 1.0 } } };
         const depth_clear_value = c.VkClearValue{ .depthStencil = .{ .depth = 1.0, .stencil = 0 } };
 
         var clear_values: [2]c.VkClearValue = .{

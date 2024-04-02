@@ -1,11 +1,5 @@
 #version 460
 
-float gridSize = 100.0;
-float gridCellSize = 0.025;
-vec4 gridColorThinLine = vec4(0.5, 0.5, 0.5, 1.0);
-vec4 gridColorThickLine = vec4(0.0, 0.0, 0.0, 1.0);
-const float gridMinPixelsBetweenCells = 2.0;
-
 vec3 gridPlane[6] = vec3[](
     vec3(1, 1, 0), vec3(-1, -1, 0), vec3(-1, 1, 0),
     vec3(-1, -1, 0), vec3(1, 1, 0), vec3(1, -1, 0)
@@ -16,20 +10,30 @@ layout(set = 0, binding = 0) uniform Camera {
     mat4 projection;
 } camera;
 
-// layout(location = 0) out vec2 gridUV;
-// layout(location = 1) out vec3 cameraPos;
+layout(location = 0) out float near;
+layout(location = 1) out float far;
+layout(location = 2) out vec3 nearPoint;
+layout(location = 3) out vec3 farPoint;
+layout(location = 4) out mat4 view;
+layout(location = 8) out mat4 projection;
+
+vec3 unprojectPoint(float x, float y, float z, mat4 view, mat4 projection) {
+    vec4 clipSpace = vec4(x, y, z, 1.0);
+    vec4 eyeSpace = inverse(projection) * clipSpace;
+    vec4 worldSpace = inverse(view) * eyeSpace;
+    return worldSpace.xyz / worldSpace.w;
+}
 
 void main() {
-    
-    // vec3 worldPos = grid_pos[gl_VertexIndex];
-    // vec4 clipPos = camera.projection * camera.view * vec4(worldPos, 1.0);
-    // gl_Position = clipPos;
-    
-    // gridUV = worldPos.xz;
-    // cameraPos = camera.view[3].xyz;
-    
-    // gl_PointSize = 1.0;
+    vec3 point = gridPlane[gl_VertexIndex];
 
-    gl_Position = camera.projection * camera.view * vec4(gridPlane[gl_VertexIndex].xyz, 1.0);
-    
+    near = 0.1;
+    far = 100.0;
+    nearPoint = unprojectPoint(point.x, point.y, 0.0, camera.view, camera.projection).xyz;
+    farPoint = unprojectPoint(point.x, point.y, 1.0, camera.view, camera.projection).xyz;
+    view = camera.view;
+    projection = camera.projection;
+
+    gl_Position = vec4(point, 1.0);
 }
+

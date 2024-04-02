@@ -23,7 +23,7 @@ fn createCamera(it: *ecs.iter_t) callconv(.C) void {
 
     const camera_entity = ecs.new_id(it.world);
     _ = ecs.add(it.world, camera_entity, CameraController);
-    _ = ecs.set(it.world, camera_entity, transform.Position, .{ .x = 0, .y = 0, .z = 5 });
+    _ = ecs.set(it.world, camera_entity, transform.Position, .{ .x = 0, .y = 0.1, .z = 5 });
     _ = ecs.set(it.world, camera_entity, transform.Orientation, .{ .quat = zmath.qidentity() });
     _ = ecs.set(it.world, camera_entity, transform.Velocity, std.mem.zeroInit(transform.Velocity, .{}));
     _ = ecs.set(it.world, camera_entity, transform.AngularVelocity, std.mem.zeroInit(transform.AngularVelocity, .{}));
@@ -98,10 +98,10 @@ fn updateCamera(it: *ecs.iter_t) callconv(.C) void {
         }
 
         if (input.keys[ux.KEY_UP].state) {
-            angular_vel.x -= angular_acceleration;
+            angular_vel.x += angular_acceleration;
         }
         if (input.keys[ux.KEY_DOWN].state) {
-            angular_vel.x += angular_acceleration;
+            angular_vel.x -= angular_acceleration;
         }
 
         _ = ecs.set(it.world, e, transform.Velocity, vel);
