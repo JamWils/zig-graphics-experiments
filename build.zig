@@ -2,6 +2,10 @@ const std = @import("std");
 const flecs = @import("flecs");
 const vulkan = @import("vulkan");
 
+const LibtoolStep = @import("./build/libtool_step.zig");
+const LipoStep = @import("./build/lipo_step.zig");
+const XCFrameworkStep = @import("./build/xcframework_step.zig");
+
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
@@ -37,14 +41,6 @@ pub fn build(b: *std.Build) !void {
         unit_tests.root_module.addImport(e.key_ptr.*, e.value_ptr.*);
     }
 
-    const imgui = b.dependency("imgui", .{ .target = target,.optimize = optimize });
-    exe.linkLibrary(imgui.artifact("imgui"));
-
-    const sdl = b.dependency("sdl", .{ .target = target, .optimize = optimize });
-    exe.linkLibrary(sdl.artifact("sdl"));
-
-    vulkan.addToCompileStep(b, target, exe);
-
     // const vulkan = b.dependency("vulkan", .{ .target = target, .optimize = optimize });
     // exe.linkLibrary(vulkan.artifact("vulkan"));
 
@@ -55,12 +51,20 @@ pub fn build(b: *std.Build) !void {
 
     @import("stb").addPathsToModule(&exe.root_module);
 
+    buildFramework(b, optimize);
+
     const root_target = target.result;
 
     switch (root_target.os.tag) {
         .windows => {
             compileShaders(b);
-            
+            const imgui = b.dependency("imgui", .{ .target = target,.optimize = optimize });
+            exe.linkLibrary(imgui.artifact("imgui"));
+
+            const sdl = b.dependency("sdl", .{ .target = target, .optimize = optimize });
+            exe.linkLibrary(sdl.artifact("sdl"));
+
+            vulkan.addToCompileStep(b, target, exe);
 
             // exe.addIncludePath(.{ .path = "thirdparty/vma"});
             // unit_tests.addIncludePath(.{ .path = "thirdparty/vma"});
@@ -86,24 +90,10 @@ pub fn build(b: *std.Build) !void {
         else => unreachable
     } 
 
-    // This declares intent for the executable to be installed into the
-    // standard location when the user invokes the "install" step (the default
-    // step when running `zig build`).
     b.installArtifact(exe);
 
-    // This *creates* a Run step in the build graph, to be executed when another
-    // step is evaluated that depends on it. The next line below will establish
-    // such a dependency.
     const run_cmd = b.addRunArtifact(exe);
-
-    // By making the run step depend on the install step, it will be run from the
-    // installation directory rather than directly from within the cache directory.
-    // This is not necessary, however, if the application depends on other installed
-    // files, this ensures they will be present and in the expected location.
     run_cmd.step.dependOn(b.getInstallStep());
-
-    // This allows the user to pass arguments to the application in the build
-    // command itself, like this: `zig build run -- arg1 arg2 etc`
     if (b.args) |args| {
         run_cmd.addArgs(args);
     }
@@ -114,6 +104,105 @@ pub fn build(b: *std.Build) !void {
     const run_unit_tests = b.addRunArtifact(unit_tests);
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_unit_tests.step);
+}
+
+fn buildFramework(b: *std.Build, optimize: std.builtin.OptimizeMode) void {
+    var lib_step = b.step("darwin_lib", "this will build a static library for Apple OS");
+    var build_libs_step = b.step("build-libs", "something");
+    
+    const target_count: comptime_int = 3;
+    const target_ios_sim = std.zig.CrossTarget{ .os_tag = .ios, .cpu_arch = .aarch64, .abi = .simulator }; 
+    const target_ios = std.zig.CrossTarget{ .os_tag = .ios, .cpu_arch = .aarch64 }; 
+    const target_mac = std.zig.CrossTarget{ .os_tag = .macos, .cpu_arch = .aarch64 }; 
+    // const target_mac_intel = std.zig.CrossTarget{ .os_tag = .macos, .cpu_arch = .x86_64 }; 
+    const targets: [target_count]std.zig.CrossTarget = .{ target_ios_sim, target_ios, target_mac }; 
+
+    const clib_files: [target_count]std.Build.LazyPath = .{
+        .{ .path = "build/libc_ios.txt" },
+        .{ .path = "build/libc_ios.txt" },
+        .{ .path = "build/libc_macos.txt" },
+        // .{ .path = "build/libc_macos.txt" },
+    };
+
+    var lipo_list = std.ArrayList(std.Build.LazyPath).init(b.allocator);
+    defer lipo_list.deinit();
+    for (targets, clib_files, 0..target_count) |t, clib_file, i| {
+        const target_lib = b.resolveTargetQuery(t);
+        const lib_name = std.fmt.allocPrint(b.allocator, "experiment-{}", .{i}) catch @panic("Failed to create a library name");
+        const lib = b.addStaticLibrary(.{
+            .name = lib_name,
+            .root_source_file = .{ .path = "src/main_c.zig" },
+            .target = target_lib,
+            .optimize = optimize,
+        });
+        lib.bundle_compiler_rt = true;
+        lib.linkLibC();
+        
+        // const lib_flecs_module = b.dependency("flecs", .{
+        //     .target = target_lib,
+        //     .optimize = optimize,
+        // }).module("flecs");
+
+        // lib.root_module.addImport("flecs", lib_flecs_module);
+        const scene_module = b.addModule("scene", .{
+            .root_source_file = .{ .path = "src/main.zig" },
+            .imports = &.{
+                .{ .name = "core", .module = b.dependency("core", .{}).module("core") },
+                .{ .name = "flecs", .module = b.dependency("flecs", .{}).module("flecs") },
+                .{ .name = "scene", .module = b.dependency("scene", .{}).module("scene") },
+                .{ .name = "zmath", .module = b.dependency("zmath", .{}).module("zmath") },
+            }
+        });
+
+        var scene_iter = scene_module.import_table.iterator();
+        while (scene_iter.next()) |e| {
+            lib.root_module.addImport(e.key_ptr.*, e.value_ptr.*);
+        }
+        
+        lib.setLibCFile(clib_file);
+
+        var lib_list = std.ArrayList(std.Build.LazyPath).init(b.allocator);
+        defer lib_list.deinit();
+        lib_list.append(.{ .generated = lib.getEmittedBin().generated }) catch |err| {
+            std.debug.print("append to lib_list: {}", .{err});
+        };
+
+        var libtool_list = std.ArrayList(std.Build.LazyPath).init(b.allocator);
+        defer libtool_list.deinit();
+        const libtool = LibtoolStep.create(b, .{
+            .name = "experiment",
+            .output_name = "libexperiment",
+            .sources = lib_list.items,
+        });
+        libtool.step.dependOn(&lib.step);
+        libtool_list.append(libtool.output) catch |err| {
+            std.debug.print("append to libtool_list: {}", .{err});
+        };
+
+        const static_lib_universal = LipoStep.create(b, .{
+            .name = "experimentlipo",
+            .output_name = "libexperimentlipo.a",
+            .inputs = libtool_list.items,
+        });
+        // static_lib_universal.step.dependOn(build_libs_step);
+
+        lipo_list.append(static_lib_universal.output) catch |err| {
+            std.debug.print("append to lipo_list: {}", .{err});
+        };
+        static_lib_universal.step.dependOn(libtool.step);
+        build_libs_step.dependOn(static_lib_universal.step);
+        // lib_step.dependOn(static_lib_universal.step);
+    }
+
+    const xcframework = XCFrameworkStep.create(b, .{
+        .name = "experimentKit",
+        .output_path = "frameworks/experiment.xcframework",
+        .library = lipo_list.items,
+        .headers = .{ .path = "include" },
+    });
+
+    xcframework.step.dependOn(build_libs_step);
+    lib_step.dependOn(xcframework.step);
 }
 
 fn compileShaders(b: *std.Build) void {
